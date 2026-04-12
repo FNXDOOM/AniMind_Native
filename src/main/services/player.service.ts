@@ -18,6 +18,13 @@ export interface PlayerState {
   duration: number;
 }
 
+export interface MpvAvailability {
+  available: boolean;
+  path: string;
+  version?: string;
+  error?: string;
+}
+
 export class PlayerService {
   private mpvProcess: ChildProcessWithoutNullStreams | null = null;
   private pipePath: string | null = null;
@@ -88,10 +95,72 @@ export class PlayerService {
     return this.sendRaw({ command: args });
   }
 
+  async checkAvailability(pathOverride?: string): Promise<MpvAvailability> {
+    const mpvPath = (pathOverride ?? await this.getMpvPath()).trim();
+    if (!mpvPath) {
+      return { available: false, path: '', error: 'mpv path is empty.' };
+    }
+
+    return await new Promise((resolve) => {
+      const proc = spawn(mpvPath, ['--version'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let finished = false;
+
+      const done = (result: MpvAvailability) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeout);
+        resolve(result);
+      };
+
+      const timeout = setTimeout(() => {
+        try {
+          proc.kill();
+        } catch {
+          // noop
+        }
+        done({ available: false, path: mpvPath, error: 'Timed out while probing mpv.' });
+      }, 3000);
+
+      proc.stdout.on('data', chunk => {
+        stdout += chunk.toString('utf8');
+      });
+
+      proc.stderr.on('data', chunk => {
+        stderr += chunk.toString('utf8');
+      });
+
+      proc.on('error', error => {
+        done({ available: false, path: mpvPath, error: error.message });
+      });
+
+      proc.on('exit', code => {
+        if (code === 0) {
+          const firstLine = stdout.split(/\r?\n/).find(Boolean)?.trim();
+          done({ available: true, path: mpvPath, version: firstLine || 'mpv detected' });
+          return;
+        }
+
+        const msg = stderr.trim() || stdout.trim() || `mpv exited with code ${String(code)}`;
+        done({ available: false, path: mpvPath, error: msg });
+      });
+    });
+  }
+
   async open(url: string, title = 'Animind Desktop'): Promise<void> {
     await this.stop();
 
     const mpvPath = await this.getMpvPath();
+    const availability = await this.checkAvailability(mpvPath);
+    if (!availability.available) {
+      throw new Error(`mpv is not available at "${mpvPath}". ${availability.error ?? ''}`.trim());
+    }
+
     this.pipePath = this.createPipePath();
 
     const args = [

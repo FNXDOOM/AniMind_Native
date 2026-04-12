@@ -44,6 +44,16 @@ export interface SubtitleTrack {
   content: string;
 }
 
+export interface AudioTrack {
+  id: string;
+  label: string;
+  language: string;
+  streamIndex: number;
+  codec?: string;
+  browserSupported?: boolean;
+  cached?: boolean;
+}
+
 export interface PlayerTrack {
   id: number;
   type: string;
@@ -51,4 +61,25 @@ export interface PlayerTrack {
   lang?: string;
   codec?: string;
   selected?: boolean;
+}
+
+export interface AppSettings {
+  backendUrl: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  mpvPath: string;
+}
+
+export interface MpvAvailability {
+  available: boolean;
+  path: string;
+  version?: string;
+  error?: string;
+}
+
+export interface SetupStatus {
+  settings: AppSettings;
+  missing: string[];
+  ready: boolean;
+  mpv: MpvAvailability;
 }

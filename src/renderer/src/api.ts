@@ -1,8 +1,10 @@
-import type { Episode, SessionInfo, Show, ShowDetails, StreamTicket, SubtitleTrack } from './types';
+import type { AppSettings, Episode, SessionInfo, Show, ShowDetails, StreamTicket, SubtitleTrack } from './types';
 
 export const desktopApi = {
   getSettings: () => window.animindDesktop.settings.get(),
-  saveSettings: (patch: Record<string, string>) => window.animindDesktop.settings.update(patch),
+  saveSettings: (patch: Partial<AppSettings>) => window.animindDesktop.settings.update(patch as Record<string, string>),
+  getSetupStatus: () => window.animindDesktop.settings.setupStatus(),
+  testMpv: (pathOverride?: string) => window.animindDesktop.settings.testMpv(pathOverride),
 
   getSession: () => window.animindDesktop.auth.session() as Promise<SessionInfo | null>,
   signIn: (email: string, password: string) => window.animindDesktop.auth.signIn(email, password),

@@ -9,6 +9,11 @@ export interface AppSettings {
   mpvPath: string;
 }
 
+export interface SettingsValidationResult {
+  ready: boolean;
+  missing: string[];
+}
+
 const SETTINGS_FILE = 'settings.json';
 
 function getDefaultSettings(): AppSettings {
@@ -26,6 +31,20 @@ function getSettingsPath(): string {
 
 export class SettingsService {
   private cache: AppSettings | null = null;
+
+  validateSettings(settings: AppSettings): SettingsValidationResult {
+    const missing: string[] = [];
+    if (!settings.backendUrl.trim()) missing.push('backendUrl');
+    if (!settings.supabaseUrl.trim()) missing.push('supabaseUrl');
+    if (!settings.supabaseAnonKey.trim()) missing.push('supabaseAnonKey');
+    if (!settings.mpvPath.trim()) missing.push('mpvPath');
+    return { ready: missing.length === 0, missing };
+  }
+
+  async getValidation(): Promise<SettingsValidationResult> {
+    const settings = await this.getSettings();
+    return this.validateSettings(settings);
+  }
 
   async getSettings(): Promise<AppSettings> {
     if (this.cache) return this.cache;

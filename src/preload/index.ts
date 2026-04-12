@@ -4,6 +4,8 @@ const api = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (patch: Record<string, string>) => ipcRenderer.invoke('settings:update', patch),
+    setupStatus: () => ipcRenderer.invoke('settings:setupStatus'),
+    testMpv: (pathOverride?: string) => ipcRenderer.invoke('settings:testMpv', pathOverride),
   },
   auth: {
     session: () => ipcRenderer.invoke('auth:session'),
