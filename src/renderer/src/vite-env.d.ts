@@ -4,6 +4,13 @@ interface AnimindDesktopApi {
   settings: {
     get: () => Promise<{ backendUrl: string; supabaseUrl: string; supabaseAnonKey: string; mpvPath: string }>;
     update: (patch: Record<string, string>) => Promise<{ backendUrl: string; supabaseUrl: string; supabaseAnonKey: string; mpvPath: string }>;
+    setupStatus: () => Promise<{
+      settings: { backendUrl: string; supabaseUrl: string; supabaseAnonKey: string; mpvPath: string };
+      missing: string[];
+      ready: boolean;
+      mpv: { available: boolean; path: string; version?: string; error?: string };
+    }>;
+    testMpv: (pathOverride?: string) => Promise<{ available: boolean; path: string; version?: string; error?: string }>;
   };
   auth: {
     session: () => Promise<{ userId: string; email?: string } | null>;

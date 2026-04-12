@@ -16,6 +16,7 @@ export function LoginPage({ onSubmit, error }: Props) {
         <h1>Animind Desktop</h1>
         <p className="muted">Sign in with your existing Animind account.</p>
         <form
+          className="form-grid"
           onSubmit={async e => {
             e.preventDefault();
             setLoading(true);
@@ -34,7 +35,7 @@ export function LoginPage({ onSubmit, error }: Props) {
             Password
             <input value={password} onChange={e => setPassword(e.target.value)} type="password" required />
           </label>
-          <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign In'}</button>
+          <button className="primary-btn" type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign In'}</button>
         </form>
         {error ? <div className="error">{error}</div> : null}
       </div>

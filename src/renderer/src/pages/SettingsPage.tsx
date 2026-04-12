@@ -1,19 +1,13 @@
 import React, { useEffect, useState } from 'react';
-
-type Settings = {
-  backendUrl: string;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
-  mpvPath: string;
-};
+import type { AppSettings } from '../types';
 
 type Props = {
-  onLoad: () => Promise<Settings>;
-  onSave: (next: Settings) => Promise<unknown>;
+  onLoad: () => Promise<AppSettings>;
+  onSave: (next: AppSettings) => Promise<unknown>;
 };
 
 export function SettingsPage({ onLoad, onSave }: Props) {
-  const [settings, setSettings] = useState<Settings>({
+  const [settings, setSettings] = useState<AppSettings>({
     backendUrl: '',
     supabaseUrl: '',
     supabaseAnonKey: '',
@@ -66,6 +60,7 @@ export function SettingsPage({ onLoad, onSave }: Props) {
 
       <div className="row gap-sm">
         <button
+          className="primary-btn"
           onClick={async () => {
             setStatus('Saving...');
             try {
