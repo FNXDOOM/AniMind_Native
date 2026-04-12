@@ -25,6 +25,19 @@ export function usePlayer(animeId: string | null, episodeIndex: number | null) {
   }, []);
 
   useEffect(() => {
+    const isPlayerActive = !!animeId && episodeIndex !== null;
+    if (!isPlayerActive) {
+      setPaused(true);
+      setTimePos(0);
+      setDuration(0);
+      setTracks([]);
+      if (pollTimer.current) {
+        window.clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
+      return;
+    }
+
     if (pollTimer.current) {
       window.clearInterval(pollTimer.current);
       pollTimer.current = null;
@@ -40,7 +53,7 @@ export function usePlayer(animeId: string | null, episodeIndex: number | null) {
         pollTimer.current = null;
       }
     };
-  }, [loadState]);
+  }, [animeId, episodeIndex, loadState]);
 
   useEffect(() => {
     if (!animeId || episodeIndex === null) return;
