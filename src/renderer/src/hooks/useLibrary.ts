@@ -39,6 +39,11 @@ export function useLibrary() {
     void loadShows();
   }, [loadShows]);
 
+  const clearSelectedShow = useCallback(() => {
+    setSelectedShow(null);
+    setError('');
+  }, []);
+
   return {
     shows,
     loadingShows,
@@ -47,5 +52,6 @@ export function useLibrary() {
     error,
     loadShows,
     loadShowDetails,
+    clearSelectedShow,
   };
 }

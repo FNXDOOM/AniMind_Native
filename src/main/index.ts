@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
@@ -11,6 +11,14 @@ import { progressService } from './services/progress.service';
 
 let mainWindow: BrowserWindow | null = null;
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('animind', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('animind');
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -88,6 +96,16 @@ function registerIpcHandlers(): void {
       accessToken: result.accessToken,
     };
   });
+  
+  ipcMain.handle('auth:google', async () => {
+    const result = await authService.signInWithGoogle();
+    return {
+      userId: result.user.id,
+      email: result.user.email ?? undefined,
+      accessToken: result.accessToken,
+    };
+  });
+
   ipcMain.handle('auth:signout', async () => {
     await authService.signOut();
     return { ok: true };
@@ -168,6 +186,14 @@ app.whenReady().then(async () => {
   createWindow();
 
   app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+
+  app.on('open-url', (event) => {
+    event.preventDefault();
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();

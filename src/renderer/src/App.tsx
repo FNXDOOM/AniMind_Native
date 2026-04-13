@@ -29,7 +29,7 @@ export default function App() {
   const [opening, setOpening] = useState(false);
   const [cloudSubtitles, setCloudSubtitles] = useState<SubtitleTrack[]>([]);
 
-  const { shows, selectedShow, loadingShows, loadingDetails, error, loadShowDetails } = useLibrary();
+  const { shows, selectedShow, loadingShows, loadingDetails, error, loadShowDetails, clearSelectedShow } = useLibrary();
 
   const episodeIndex = useMemo(() => {
     if (!selectedShow || !currentEpisode) return null;
@@ -68,6 +68,17 @@ export default function App() {
       setSession({ userId: result.userId, email: result.email });
     } catch (err: any) {
       setAuthError(err?.message ?? 'Login failed');
+      throw err;
+    }
+  }, []);
+
+  const signInWithGoogle = useCallback(async () => {
+    setAuthError('');
+    try {
+      const result = await desktopApi.signInWithGoogle();
+      setSession({ userId: result.userId, email: result.email });
+    } catch (err: any) {
+      setAuthError(err?.message ?? 'Google Sign-In failed');
       throw err;
     }
   }, []);
@@ -190,64 +201,72 @@ export default function App() {
   }
 
   if (!session) {
-    return <LoginPage onSubmit={signIn} error={authError} />;
+    return <LoginPage onSubmit={signIn} onGoogleSignIn={signInWithGoogle} error={authError} />;
   }
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div className="brand-block">
-          <h1 className="brand-title">Animind</h1>
-          <p className="brand-subtitle">Desktop Stream Lounge</p>
+    <>
+      {/* Full-screen immersive player — rendered outside the shell so nothing clips it */}
+      {view === 'player' && currentEpisode && currentAnimeId ? (
+        <PlayerPage
+          animeId={currentAnimeId}
+          animeTitle={currentAnimeTitle}
+          episode={currentEpisode}
+          streamInfo={streamInfo}
+          streamUrl={streamUrl}
+          audioTracks={audioTracks}
+          selectedAudioTrackIndex={selectedAudioTrackIndex}
+          resumeFromSeconds={resumeFromSeconds}
+          loading={opening}
+          subtitles={cloudSubtitles}
+          error={playerError}
+          onSelectAudioTrack={(trackIndex, timePos) => switchAudioTrack(trackIndex, timePos)}
+          onSaveProgress={seconds => saveProgress(seconds)}
+          onOpenExternal={() => openInExternalPlayer()}
+          onBack={() => setView('library')}
+        />
+      ) : (
+        <div className="app-shell">
+          <aside className="bento-sidebar">
+            <h1 className="sidebar-brand">ANIMIND TV</h1>
+
+            <nav className="sidebar-nav">
+              <button title="Home" className={`nav-icon-btn ${view === 'library' ? 'active' : ''}`} onClick={() => setView('library')}>Home</button>
+              <button title="Now Playing" className={`nav-icon-btn ${view === 'player' ? 'active' : ''}`} onClick={() => setView('player')} disabled={!currentEpisode}>Now Playing</button>
+              <button title="Settings" className={`nav-icon-btn ${view === 'settings' ? 'active' : ''}`} onClick={openSettings}>Settings</button>
+            </nav>
+
+            <div className="sidebar-bottom">
+              <button title="Sign Out" className="nav-icon-btn danger-btn" onClick={() => void signOut()}>Sign Out</button>
+            </div>
+          </aside>
+
+          <main className={`app-main view-${view}`}>
+            <div className={`ambient-bg ${view === 'library' && selectedShow ? 'active' : ''}`} style={selectedShow ? { backgroundImage: `url(${selectedShow.anime.imageUrl})` } : undefined} />
+            <div className="app-main-content" style={{ position: 'relative', zIndex: 1 }}>
+              {view === 'library' && (
+                <LibraryPage
+                  shows={shows}
+                  details={selectedShow}
+                  loadingShows={loadingShows}
+                  loadingDetails={loadingDetails}
+                  error={error || playerError}
+                  onSelectShow={showId => void loadShowDetails(showId)}
+                  onClearShow={clearSelectedShow}
+                  onPlayEpisode={(animeId, animeTitle, episode) => void startEpisode(animeId, animeTitle, episode)}
+                />
+              )}
+
+              {view === 'settings' && (
+                <SettingsPage
+                  onLoad={() => desktopApi.getSettings()}
+                  onSave={next => saveAndValidateSetup(next as AppSettings)}
+                />
+              )}
+            </div>
+          </main>
         </div>
-
-        <nav className="row gap-sm align-center top-nav">
-          <button className={`nav-btn ${view === 'library' ? 'active' : ''}`} onClick={() => setView('library')}>Library</button>
-          <button className={`nav-btn ${view === 'player' ? 'active' : ''}`} onClick={() => setView('player')} disabled={!currentEpisode}>Player</button>
-          <button className={`nav-btn ${view === 'settings' ? 'active' : ''}`} onClick={openSettings}>Settings</button>
-          <button className="nav-btn danger" onClick={() => void signOut()}>Sign Out</button>
-        </nav>
-      </header>
-
-      <main className={`app-main view-${view}`}>
-        {view === 'library' && (
-          <LibraryPage
-            shows={shows}
-            details={selectedShow}
-            loadingShows={loadingShows}
-            loadingDetails={loadingDetails}
-            error={error || playerError}
-            onSelectShow={showId => void loadShowDetails(showId)}
-            onPlayEpisode={(animeId, animeTitle, episode) => void startEpisode(animeId, animeTitle, episode)}
-          />
-        )}
-
-        {view === 'player' && currentEpisode && currentAnimeId ? (
-          <PlayerPage
-            animeId={currentAnimeId}
-            animeTitle={currentAnimeTitle}
-            episode={currentEpisode}
-            streamInfo={streamInfo}
-            streamUrl={streamUrl}
-            audioTracks={audioTracks}
-            selectedAudioTrackIndex={selectedAudioTrackIndex}
-            resumeFromSeconds={resumeFromSeconds}
-            loading={opening}
-            subtitles={cloudSubtitles}
-            error={playerError}
-            onSelectAudioTrack={(trackIndex, timePos) => switchAudioTrack(trackIndex, timePos)}
-            onSaveProgress={seconds => saveProgress(seconds)}
-            onOpenExternal={() => openInExternalPlayer()}
-          />
-        ) : null}
-
-        {view === 'settings' && (
-          <SettingsPage
-            onLoad={() => desktopApi.getSettings()}
-            onSave={next => saveAndValidateSetup(next as AppSettings)}
-          />
-        )}
-      </main>
-    </div>
+      )}
+    </>
   );
 }

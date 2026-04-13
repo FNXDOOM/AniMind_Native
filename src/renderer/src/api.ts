@@ -8,6 +8,7 @@ export const desktopApi = {
 
   getSession: () => window.animindDesktop.auth.session() as Promise<SessionInfo | null>,
   signIn: (email: string, password: string) => window.animindDesktop.auth.signIn(email, password),
+  signInWithGoogle: () => window.animindDesktop.auth.signInWithGoogle() as Promise<SessionInfo>,
   signOut: () => window.animindDesktop.auth.signOut(),
 
   getShows: () => window.animindDesktop.library.getShows() as Promise<Show[]>,

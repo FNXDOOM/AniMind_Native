@@ -10,6 +10,7 @@ const api = {
   auth: {
     session: () => ipcRenderer.invoke('auth:session'),
     signIn: (email: string, password: string) => ipcRenderer.invoke('auth:signin', { email, password }),
+    signInWithGoogle: () => ipcRenderer.invoke('auth:google'),
     signOut: () => ipcRenderer.invoke('auth:signout'),
   },
   library: {

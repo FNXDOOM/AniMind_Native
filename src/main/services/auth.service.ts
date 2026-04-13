@@ -1,4 +1,5 @@
-import { app } from 'electron';
+import { app, shell } from 'electron';
+import http from 'http';
 import { createClient, SupabaseClient, Session, User } from '@supabase/supabase-js';
 import { mkdir, readFile, writeFile, unlink } from 'fs/promises';
 import path from 'path';
@@ -83,6 +84,138 @@ export class AuthService {
     this.session = data.session;
     await this.persistSession(data.session);
     return { user: data.user, accessToken: data.session.access_token };
+  }
+
+  async signInWithGoogle(): Promise<{ user: User; accessToken: string }> {
+    const supabase = await this.getSupabase();
+    
+    return new Promise((resolve, reject) => {
+      let server: http.Server | null = null;
+      let isSettled = false;
+
+      const cleanup = () => {
+        if (server) {
+          server.close();
+          server = null;
+        }
+      };
+
+      const finish = (result: { user: User; accessToken: string }) => {
+        if (isSettled) return;
+        isSettled = true;
+        resolve(result);
+        cleanup();
+      };
+
+      const fail = (error: any) => {
+        if (isSettled) return;
+        isSettled = true;
+        reject(error);
+        cleanup();
+      };
+
+      server = http.createServer((req, res) => {
+        try {
+          const url = new URL(req.url || '/', 'http://localhost:43210');
+          
+          if (url.pathname === '/callback') {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(`
+              <!DOCTYPE html>
+              <html lang="en">
+              <head>
+                <meta charset="UTF-8">
+                <title>Authentication Completed</title>
+                <style>
+                  body { font-family: system-ui, -apple-system, sans-serif; background: #0b0f19; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                  .container { text-align: center; padding: 40px; background: #111827; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
+                  h1 { margin-bottom: 12px; color: #10c996; font-size: 24px; }
+                  p { color: #a1a1aa; font-size: 16px; margin: 0; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h1>Animind Desktop</h1>
+                  <p>Authentication processed successfully.</p>
+                  <p style="font-weight: bold; margin-top: 20px; color: #fff;">You can now safely close this browser window.</p>
+                </div>
+                <script>
+                  fetch('http://localhost:43210/exchange', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hash: window.location.hash.substring(1) })
+                  }).catch(console.error);
+                </script>
+              </body>
+              </html>
+            `);
+          } else if (url.pathname === '/exchange' && req.method === 'POST') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', async () => {
+              try {
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                const parsed = JSON.parse(body);
+                const hashParams = new URLSearchParams(parsed.hash);
+                
+                const accessToken = hashParams.get('access_token');
+                const refreshToken = hashParams.get('refresh_token');
+
+                if (!accessToken || !refreshToken) {
+                  res.writeHead(400);
+                  res.end('Missing tokens');
+                  fail(new Error('Tokens missing from callback'));
+                  return;
+                }
+
+                const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+                
+                if (error || !data.user || !data.session) {
+                  res.writeHead(400);
+                  res.end('Session failed');
+                  fail(new Error(error?.message ?? 'Failed to finalize session'));
+                  return;
+                }
+
+                this.session = data.session;
+                await this.persistSession(data.session);
+
+                res.writeHead(200);
+                res.end('OK');
+                
+                finish({ user: data.user, accessToken: data.session.access_token });
+              } catch (e) {
+                console.error('[AuthServer] Exchange error:', e);
+                res.writeHead(500);
+                res.end('Internal error');
+                fail(e);
+              }
+            });
+          } else {
+            res.writeHead(404);
+            res.end();
+          }
+        } catch (err) {
+          fail(err);
+        }
+      });
+
+      server.on('error', err => fail(err));
+
+      server.listen(43210, async () => {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: 'http://localhost:43210/callback', skipBrowserRedirect: true },
+        });
+
+        if (error || !data.url) {
+          fail(new Error(error?.message ?? 'OAuth initialization failed'));
+          return;
+        }
+
+        await shell.openExternal(data.url);
+      });
+    });
   }
 
   async signOut(): Promise<void> {

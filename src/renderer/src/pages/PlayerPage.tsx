@@ -18,6 +18,7 @@ type Props = {
   onSelectAudioTrack: (streamIndex: number | null, currentTime: number) => Promise<unknown>;
   onSaveProgress: (seconds: number) => Promise<unknown>;
   onOpenExternal: () => Promise<unknown>;
+  onBack: () => void;
 };
 
 function normalizeSubtitleContent(content: string): string {
@@ -127,11 +128,13 @@ export function PlayerPage(props: Props) {
     onSelectAudioTrack,
     onSaveProgress,
     onOpenExternal,
+    onBack,
   } = props;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const hideControlsTimerRef = useRef<number | null>(null);
   const [paused, setPaused] = useState(true);
   const [timePos, setTimePos] = useState(0);
@@ -207,8 +210,10 @@ export function PlayerPage(props: Props) {
     if (!settingsMenuOpen) return;
 
     const onDocumentMouseDown = (event: MouseEvent) => {
-      if (!settingsMenuRef.current) return;
-      if (settingsMenuRef.current.contains(event.target as Node)) return;
+      const target = event.target as Node;
+      // Don't close if clicking inside the menu OR on the toggle button itself
+      if (settingsMenuRef.current?.contains(target)) return;
+      if (settingsBtnRef.current?.contains(target)) return;
       setSettingsMenuOpen(false);
     };
 
@@ -412,251 +417,222 @@ export function PlayerPage(props: Props) {
   }, [seekBy, signalInteraction, toggleFullscreen, togglePlayback]);
 
   return (
-    <div className="panel stack-gap player-page">
-      <div className="player-header">
-        <h2>{animeTitle}</h2>
-        <p className="muted">Episode {episode.number}: {episode.title}</p>
-      </div>
+    <div
+      ref={shellRef}
+      className="video-shell"
+      style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#000', cursor: controlsVisible ? 'default' : 'none' }}
+      onMouseMove={signalInteraction}
+      onMouseEnter={signalInteraction}
+      onMouseLeave={() => { if (!paused && !settingsMenuOpen) setControlsVisible(false); }}
+    >
+      {loading && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, pointerEvents: 'none' }}>
+          <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 18 }}>Loading stream...</span>
+        </div>
+      )}
+      {(error || playerError) && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, pointerEvents: 'none' }}>
+          <span className="error">{error || playerError}</span>
+        </div>
+      )}
 
-      {loading ? <p className="muted">Loading stream...</p> : null}
-      {error ? <p className="error">{error}</p> : null}
-      {playerError ? <p className="error">{playerError}</p> : null}
-
-      <div
-        ref={shellRef}
-        className="video-shell plex-shell modern-player-shell"
-        onMouseMove={() => {
-          signalInteraction();
-        }}
-        onMouseEnter={() => signalInteraction()}
-        onMouseLeave={() => {
-          if (!paused && !settingsMenuOpen) {
-            setControlsVisible(false);
-          }
-        }}
+      <video
+        ref={videoRef}
+        className="video-element"
+        src={streamUrl}
+        playsInline
+        preload="metadata"
+        onClick={togglePlayback}
+        onDoubleClick={() => void toggleFullscreen()}
       >
-        <video
-          ref={videoRef}
-          className="video-element"
-          src={streamUrl}
-          playsInline
-          preload="metadata"
-          onClick={togglePlayback}
-          onDoubleClick={() => void toggleFullscreen()}
-        >
-          {subtitleUrl && selectedSubtitle ? (
-            <track
-              kind="subtitles"
-              src={subtitleUrl}
-              label={selectedSubtitle.label}
-              srcLang={selectedSubtitle.language || 'en'}
-              default
-            />
-          ) : null}
-        </video>
-
-        {paused ? (
-          <button
-            className="center-play-btn"
-            title="Play"
-            aria-label="Play"
-            onClick={() => {
-              togglePlayback();
-              signalInteraction();
-            }}
-          >
-            <PlayIcon className="control-icon center-play-icon" />
-          </button>
+        {subtitleUrl && selectedSubtitle ? (
+          <track
+            kind="subtitles"
+            src={subtitleUrl}
+            label={selectedSubtitle.label}
+            srcLang={selectedSubtitle.language || 'en'}
+            default
+          />
         ) : null}
+      </video>
 
-        <div className={`plex-overlay modern-overlay ${controlsVisible ? 'visible' : 'hidden'}`}>
-          <div className="plex-topbar">
-            <span className="muted">{animeTitle} - Episode {episode.number}</span>
-          </div>
+      {paused ? (
+        <button
+          className="center-play-btn"
+          title="Play"
+          aria-label="Play"
+          onClick={() => { togglePlayback(); signalInteraction(); }}
+          style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 5, background: 'rgba(0,0,0,0.5)', width: 72, height: 72, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <PlayIcon className="control-icon" />
+        </button>
+      ) : null}
 
-          <div className="plex-bottombar">
-            <div className="yt-progress-wrap" title="Seek">
-              <div className="yt-progress-track" />
-              <div className="yt-progress-buffer" style={{ width: `${bufferedPercent}%` }} />
-              <div className="yt-progress-played" style={{ width: `${playedPercent}%` }} />
-              <input
-                className="plex-progress yt-progress-input"
-                type="range"
-                min={0}
-                max={Math.max(1, Math.floor(duration || 0))}
-                value={Math.min(Math.floor(timePos || 0), Math.max(1, Math.floor(duration || 0)))}
-                onChange={e => {
-                  const video = videoRef.current;
-                  if (!video) return;
-                  const next = Number(e.target.value);
-                  video.currentTime = next;
-                  signalInteraction();
-                }}
-              />
-            </div>
-
-            <div className="plex-controls-row modern-controls-row">
-              <div className="row gap-sm align-center control-cluster-left">
-                <button className="ghost-btn yt-btn transport-btn" onClick={() => seekBy(-10)} title="Back 10 seconds" aria-label="Back 10 seconds">
-                  <RewindIcon className="control-icon" />
-                </button>
-                <button className="ghost-btn yt-btn transport-btn play-btn" onClick={togglePlayback} title={paused ? 'Play' : 'Pause'} aria-label={paused ? 'Play' : 'Pause'}>
-                  {paused ? <PlayIcon className="control-icon" /> : <PauseIcon className="control-icon" />}
-                </button>
-                <button className="ghost-btn yt-btn transport-btn" onClick={() => seekBy(10)} title="Forward 10 seconds" aria-label="Forward 10 seconds">
-                  <ForwardIcon className="control-icon" />
-                </button>
-                <span className="time-readout">{formatTime(timePos)} / {formatTime(duration)}</span>
-                <span className="muted tiny">-{formatTime(Math.max(0, duration - timePos))}</span>
-              </div>
-
-              <div className="row gap-sm align-center control-cluster-right wrap">
-                <label className="row gap-sm align-center volume-wrap">
-                  <button className="ghost-btn yt-btn mute-btn" onClick={() => setIsMuted(prev => !prev)} title="Mute" aria-label="Toggle mute">
-                    {isMuted || volume === 0 ? <MuteIcon className="control-icon" /> : <VolumeIcon className="control-icon" />}
-                  </button>
-                  <input
-                    className="volume-slider"
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={volume}
-                    onChange={e => {
-                      const next = Number(e.target.value);
-                      setVolume(next);
-                      if (next > 0) setIsMuted(false);
-                      signalInteraction();
-                    }}
-                  />
-                </label>
-                <button
-                  className="ghost-btn yt-btn settings-trigger"
-                  onClick={() => {
-                    setSettingsMenuOpen(v => !v);
-                    setSettingsTab('main');
-                  }}
-                  title="Settings"
-                  aria-label="Open player settings"
-                >
-                  <SettingsIcon className="control-icon" />
-                </button>
-                <button className="ghost-btn yt-btn" onClick={() => void onOpenExternal()} title="Open external player" aria-label="Open external player">
-                  <PopoutIcon className="control-icon" />
-                </button>
-                <button className="ghost-btn yt-btn" onClick={() => void toggleFullscreen()} title="Fullscreen" aria-label="Toggle fullscreen">
-                  {isFullscreen ? <FullscreenExitIcon className="control-icon" /> : <FullscreenIcon className="control-icon" />}
-                </button>
-              </div>
-            </div>
+      <div className={`plex-overlay ${controlsVisible ? 'visible' : 'hidden'}`}>
+        {/* Top bar */}
+        <div className="plex-topbar" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <button
+            onClick={onBack}
+            title="Back to Library"
+            style={{
+              background: 'none', border: 'none', color: '#fff', cursor: 'pointer',
+              padding: '4px', display: 'flex', alignItems: 'center', opacity: 0.85,
+              transition: 'opacity 0.2s', flexShrink: 0,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '0.85')}
+          >
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+              <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+            </svg>
+          </button>
+          <div>
+            <div style={{ color: '#fff', fontSize: 18, fontWeight: 600, lineHeight: 1.2 }}>{animeTitle}</div>
+            <div className="muted" style={{ fontSize: 13 }}>Episode {episode.number}{episode.title ? ` — ${episode.title}` : ''}</div>
           </div>
         </div>
 
-        {settingsMenuOpen ? (
-          <div ref={settingsMenuRef} className="player-settings-menu">
-            <div className="settings-panel">
-              {settingsTab === 'main' ? (
-                <div className="settings-option-list">
-                  <button className="settings-option row split" onClick={() => setSettingsTab('playback')}>
-                    <span>Playback Speed</span>
-                    <span>{speed.toFixed(speed % 1 === 0 ? 1 : 2)}x</span>
-                  </button>
-                  <button className="settings-option row split" onClick={() => setSettingsTab('audio')}>
-                    <span>Audio Track</span>
-                    <span>{activeAudioLabel}</span>
-                  </button>
-                  <button className="settings-option row split" onClick={() => setSettingsTab('subtitles')}>
-                    <span>Subtitles</span>
-                    <span>{activeSubtitleLabel}</span>
-                  </button>
-                </div>
-              ) : null}
+        {/* Bottom bar */}
+        <div className="plex-bottombar">
+          {/* Progress bar first (above controls) */}
+          <div className="plex-progress-wrap" title="Seek">
+            <div className="plex-progress-track" />
+            <div className="plex-progress-buffer" style={{ width: `${bufferedPercent}%` }} />
+            <div className="plex-progress-played" style={{ width: `${playedPercent}%` }} />
+            <input
+              className="plex-progress-input"
+              type="range"
+              min={0}
+              max={Math.max(1, Math.floor(duration || 0))}
+              value={Math.min(Math.floor(timePos || 0), Math.max(1, Math.floor(duration || 0)))}
+              onChange={e => {
+                const video = videoRef.current;
+                if (!video) return;
+                video.currentTime = Number(e.target.value);
+                signalInteraction();
+              }}
+            />
+          </div>
 
-              {settingsTab !== 'main' ? (
-                <button className="settings-back" onClick={() => setSettingsTab('main')}>Back</button>
-              ) : null}
+          {/* Controls row */}
+          <div className="plex-controls-row">
+            <div className="row gap-sm align-center">
+              <button className="ghost-btn" onClick={() => seekBy(-10)} title="Back 10s" style={{ width: 36, height: 36 }}>
+                <RewindIcon className="control-icon" />
+              </button>
+              <button className="ghost-btn" onClick={togglePlayback} title={paused ? 'Play' : 'Pause'} style={{ width: 44, height: 44 }}>
+                {paused ? <PlayIcon className="control-icon" /> : <PauseIcon className="control-icon" />}
+              </button>
+              <button className="ghost-btn" onClick={() => seekBy(10)} title="Forward 10s" style={{ width: 36, height: 36 }}>
+                <ForwardIcon className="control-icon" />
+              </button>
+              <label className="row gap-sm align-center volume-wrap" style={{ marginLeft: 8 }}>
+                <button className="ghost-btn" onClick={() => setIsMuted(prev => !prev)} title="Mute" style={{ width: 36, height: 36 }}>
+                  {isMuted || volume === 0 ? <MuteIcon className="control-icon" /> : <VolumeIcon className="control-icon" />}
+                </button>
+                <input
+                  className="volume-slider"
+                  type="range" min={0} max={100} value={volume}
+                  style={{ width: 80, accentColor: 'var(--accent)' }}
+                  onChange={e => {
+                    const next = Number(e.target.value);
+                    setVolume(next);
+                    if (next > 0) setIsMuted(false);
+                    signalInteraction();
+                  }}
+                />
+              </label>
+              <span className="time-readout">{formatTime(timePos)} / {formatTime(duration)}</span>
+            </div>
 
-              {settingsTab === 'playback' ? (
-                <div className="settings-option-list">
-                  {[0.75, 1, 1.25, 1.5, 2].map(value => (
-                    <button
-                      key={value}
-                      className={`settings-option ${speed === value ? 'active' : ''}`}
-                      onClick={() => {
-                        setSpeed(value);
-                        setSettingsMenuOpen(false);
-                      }}
-                    >
-                      {value.toFixed(value % 1 === 0 ? 1 : 2)}x
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              {settingsTab === 'audio' ? (
-                <div className="settings-option-list">
-                  <button
-                    className={`settings-option ${selectedAudioTrackIndex === null ? 'active' : ''}`}
-                    onClick={() => {
-                      void onSelectAudioTrack(null, timePos);
-                      setSettingsMenuOpen(false);
-                    }}
-                  >
-                    Default {selectedAudioTrackIndex === null ? 'Active' : ''}
-                  </button>
-                  {audioTracks.map(track => (
-                    <button
-                      key={track.id}
-                      className={`settings-option ${selectedAudioTrackIndex === track.streamIndex ? 'active' : ''}`}
-                      onClick={() => {
-                        void onSelectAudioTrack(track.streamIndex, timePos);
-                        setSettingsMenuOpen(false);
-                      }}
-                    >
-                      {track.label || track.language || 'Unknown'} {selectedAudioTrackIndex === track.streamIndex ? 'Active' : ''}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              {settingsTab === 'subtitles' ? (
-                <div className="settings-option-list">
-                  <button
-                    className={`settings-option ${selectedSubtitleId === '' ? 'active' : ''}`}
-                    onClick={() => {
-                      setSelectedSubtitleId('');
-                      setSettingsMenuOpen(false);
-                    }}
-                  >
-                    Off {selectedSubtitleId === '' ? 'Active' : ''}
-                  </button>
-                  {subtitles.map(track => (
-                    <button
-                      key={track.id}
-                      className={`settings-option ${selectedSubtitleId === track.id ? 'active' : ''}`}
-                      onClick={() => {
-                        setSelectedSubtitleId(track.id);
-                        setSettingsMenuOpen(false);
-                      }}
-                    >
-                      {track.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+            <div className="row gap-sm align-center">
+              <button
+                ref={settingsBtnRef}
+                className="ghost-btn"
+                style={{ width: 36, height: 36 }}
+                onClick={() => { setSettingsMenuOpen(v => !v); setSettingsTab('main'); }}
+                title="Settings"
+              >
+                <SettingsIcon className="control-icon" />
+              </button>
+              <button className="ghost-btn" style={{ width: 36, height: 36 }} onClick={() => void onOpenExternal()} title="External player">
+                <PopoutIcon className="control-icon" />
+              </button>
+              <button className="ghost-btn" style={{ width: 36, height: 36 }} onClick={() => void toggleFullscreen()} title="Fullscreen">
+                {isFullscreen ? <FullscreenExitIcon className="control-icon" /> : <FullscreenIcon className="control-icon" />}
+              </button>
             </div>
           </div>
-        ) : null}
+        </div>
       </div>
 
-      <div className="row split align-center">
-        <p className="muted">Audio: {activeAudioLabel}</p>
-        <p className="muted">Subtitles: {activeSubtitleLabel}</p>
-      </div>
+      {settingsMenuOpen ? (
+        <div ref={settingsMenuRef} className="player-settings-menu">
+          <div className="settings-panel">
+            {settingsTab === 'main' ? (
+              <div className="settings-option-list">
+                <button className="settings-option row split" onClick={() => setSettingsTab('playback')}>
+                  <span>Playback Speed</span>
+                  <span>{speed.toFixed(speed % 1 === 0 ? 1 : 2)}x</span>
+                </button>
+                <button className="settings-option row split" onClick={() => setSettingsTab('audio')}>
+                  <span>Audio Track</span>
+                  <span>{activeAudioLabel}</span>
+                </button>
+                <button className="settings-option row split" onClick={() => setSettingsTab('subtitles')}>
+                  <span>Subtitles</span>
+                  <span>{activeSubtitleLabel}</span>
+                </button>
+              </div>
+            ) : null}
 
-      {streamInfo ? (
-        <div className="badge-row">
-          <span className="badge">Client: {streamInfo.clientType ?? 'unknown'}</span>
-          {streamInfo.message ? <span className="muted">{streamInfo.message}</span> : null}
+            {settingsTab !== 'main' ? (
+              <button className="settings-back" onClick={() => setSettingsTab('main')}>Back</button>
+            ) : null}
+
+            {settingsTab === 'playback' ? (
+              <div className="settings-option-list">
+                {[0.75, 1, 1.25, 1.5, 2].map(value => (
+                  <button key={value} className={`settings-option ${speed === value ? 'active' : ''}`}
+                    onClick={() => { setSpeed(value); setSettingsMenuOpen(false); }}>
+                    {value.toFixed(value % 1 === 0 ? 1 : 2)}x
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {settingsTab === 'audio' ? (
+              <div className="settings-option-list">
+                <button className={`settings-option ${selectedAudioTrackIndex === null ? 'active' : ''}`}
+                  onClick={() => { void onSelectAudioTrack(null, timePos); setSettingsMenuOpen(false); }}>
+                  Default {selectedAudioTrackIndex === null ? '✓' : ''}
+                </button>
+                {audioTracks.map(track => (
+                  <button key={track.id}
+                    className={`settings-option ${selectedAudioTrackIndex === track.streamIndex ? 'active' : ''}`}
+                    onClick={() => { void onSelectAudioTrack(track.streamIndex, timePos); setSettingsMenuOpen(false); }}>
+                    {track.label || track.language || 'Unknown'} {selectedAudioTrackIndex === track.streamIndex ? '✓' : ''}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {settingsTab === 'subtitles' ? (
+              <div className="settings-option-list">
+                <button className={`settings-option ${selectedSubtitleId === '' ? 'active' : ''}`}
+                  onClick={() => { setSelectedSubtitleId(''); setSettingsMenuOpen(false); }}>
+                  Off {selectedSubtitleId === '' ? '✓' : ''}
+                </button>
+                {subtitles.map(track => (
+                  <button key={track.id}
+                    className={`settings-option ${selectedSubtitleId === track.id ? 'active' : ''}`}
+                    onClick={() => { setSelectedSubtitleId(track.id); setSettingsMenuOpen(false); }}>
+                    {track.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

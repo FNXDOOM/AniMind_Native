@@ -15,6 +15,7 @@ interface AnimindDesktopApi {
   auth: {
     session: () => Promise<{ userId: string; email?: string } | null>;
     signIn: (email: string, password: string) => Promise<{ userId: string; email?: string; accessToken: string }>;
+    signInWithGoogle: () => Promise<{ userId: string; email?: string; accessToken: string }>;
     signOut: () => Promise<{ ok: boolean }>;
   };
   library: {
