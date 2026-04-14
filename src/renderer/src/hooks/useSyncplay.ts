@@ -148,6 +148,12 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
     const existing = socketRef.current;
     if (existing?.connected) return existing;
 
+    if (existing) {
+      existing.removeAllListeners();
+      existing.disconnect();
+      socketRef.current = null;
+    }
+
     const [settings, token] = await Promise.all([
       desktopApi.getSettings(),
       desktopApi.getAccessToken(),
@@ -347,18 +353,42 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
     return socket;
   }, [callbacks, startHeartbeat, startNtp, stopHeartbeat]);
 
+  const emitWithAckOrDisconnect = useCallback(<TResponse,>(
+    socket: Socket,
+    eventName: string,
+    payload: Record<string, unknown>,
+  ): Promise<TResponse> => {
+    return new Promise<TResponse>((resolve, reject) => {
+      let settled = false;
+
+      const finish = (cb: () => void) => {
+        if (settled) return;
+        settled = true;
+        socket.off('disconnect', onDisconnect);
+        cb();
+      };
+
+      const onDisconnect = () => {
+        finish(() => reject(new Error(`Socket disconnected during ${eventName}`)));
+      };
+
+      socket.once('disconnect', onDisconnect);
+      socket.timeout(ACK_TIMEOUT_MS).emit(eventName, payload, (err: unknown, res: TResponse) => {
+        finish(() => {
+          if (err) {
+            reject(new Error(err instanceof Error ? err.message : `${eventName} failed`));
+            return;
+          }
+          resolve(res);
+        });
+      });
+    });
+  }, []);
+
   const createRoom = useCallback(async () => {
     const socket = await ensureConnected();
 
-    const response = await new Promise<RoomResponse>((resolve, reject) => {
-      socket.timeout(ACK_TIMEOUT_MS).emit('createRoom', { episodeId }, (err: unknown, res: RoomResponse) => {
-        if (err) {
-          reject(new Error(err instanceof Error ? err.message : 'createRoom failed'));
-          return;
-        }
-        resolve(res);
-      });
-    });
+    const response = await emitWithAckOrDisconnect<RoomResponse>(socket, 'createRoom', { episodeId });
 
     if (!response.success || !response.roomCode) {
       throw new Error(response.error ?? 'Failed to create room');
@@ -372,20 +402,12 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
       error: '',
     }));
     roomCodeRef.current = response.roomCode ?? '';
-  }, [ensureConnected, episodeId]);
+  }, [emitWithAckOrDisconnect, ensureConnected, episodeId]);
 
   const joinRoom = useCallback(async (roomCode: string) => {
     const socket = await ensureConnected();
 
-    const response = await new Promise<RoomResponse>((resolve, reject) => {
-      socket.timeout(ACK_TIMEOUT_MS).emit('joinRoom', { roomCode }, (err: unknown, res: RoomResponse) => {
-        if (err) {
-          reject(new Error(err instanceof Error ? err.message : 'joinRoom failed'));
-          return;
-        }
-        resolve(res);
-      });
-    });
+    const response = await emitWithAckOrDisconnect<RoomResponse>(socket, 'joinRoom', { roomCode });
 
     if (!response.success) {
       throw new Error(response.error ?? 'Failed to join room');
@@ -408,7 +430,7 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
     }
 
     startHeartbeat();
-  }, [callbacks, ensureConnected, startHeartbeat]);
+  }, [callbacks, emitWithAckOrDisconnect, ensureConnected, startHeartbeat]);
 
   const leaveRoom = useCallback(() => {
     disconnect();

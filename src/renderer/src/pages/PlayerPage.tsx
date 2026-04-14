@@ -44,6 +44,12 @@ function sanitizeMediaTime(value: number): number {
   return Math.max(0, value);
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  return fallback;
+}
+
 function PlayIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
@@ -178,6 +184,7 @@ export function PlayerPage(props: Props) {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const suppressSyncEmitRef = useRef(false);
+  const suppressSyncCountRef = useRef(0);
   const playbackTargetRef = useRef<'html5' | 'mpv'>('html5');
   const speedSeekTimerRef = useRef<number | null>(null);
   const stallDebounceRef = useRef<number | null>(null);
@@ -198,6 +205,18 @@ export function PlayerPage(props: Props) {
       window.clearTimeout(stallDebounceRef.current);
       stallDebounceRef.current = null;
     }
+  }, []);
+
+  const suppressSyncEmitFor = useCallback((durationMs = 250) => {
+    suppressSyncCountRef.current += 1;
+    suppressSyncEmitRef.current = true;
+
+    window.setTimeout(() => {
+      suppressSyncCountRef.current = Math.max(0, suppressSyncCountRef.current - 1);
+      if (suppressSyncCountRef.current === 0) {
+        suppressSyncEmitRef.current = false;
+      }
+    }, durationMs);
   }, []);
 
   useEffect(() => {
@@ -249,12 +268,9 @@ export function PlayerPage(props: Props) {
   const applyRemoteSeek = useCallback((time: number) => {
     const video = videoRef.current;
     if (!video) return;
-    suppressSyncEmitRef.current = true;
+    suppressSyncEmitFor();
     video.currentTime = Math.max(0, Math.min(video.duration || Number.MAX_SAFE_INTEGER, time));
-    window.setTimeout(() => {
-      suppressSyncEmitRef.current = false;
-    }, 250);
-  }, []);
+  }, [suppressSyncEmitFor]);
 
   const syncplay = useSyncplay(
     episode.id,
@@ -300,12 +316,8 @@ export function PlayerPage(props: Props) {
         applyRemoteSeek(time);
         const delay = Math.max(0, scheduledPlayAt - Date.now());
         window.setTimeout(() => {
-          suppressSyncEmitRef.current = true;
-          void video.play().catch(() => undefined).finally(() => {
-            window.setTimeout(() => {
-              suppressSyncEmitRef.current = false;
-            }, 250);
-          });
+          suppressSyncEmitFor();
+          void video.play().catch(() => undefined);
         }, delay);
       },
       onRemotePause: (time) => {
@@ -319,11 +331,8 @@ export function PlayerPage(props: Props) {
         const video = videoRef.current;
         if (!video) return;
         applyRemoteSeek(time);
-        suppressSyncEmitRef.current = true;
+        suppressSyncEmitFor();
         video.pause();
-        window.setTimeout(() => {
-          suppressSyncEmitRef.current = false;
-        }, 250);
       },
       onRemoteSeek: (time) => {
         if (playbackTargetRef.current === 'mpv' && mpvRunning) {
@@ -352,14 +361,13 @@ export function PlayerPage(props: Props) {
         const originalRate = video.playbackRate;
         const originalMuted = video.muted;
 
-        suppressSyncEmitRef.current = true;
+        suppressSyncEmitFor(duration + 50);
         video.playbackRate = rate;
         video.muted = true;
         speedSeekTimerRef.current = window.setTimeout(() => {
           applyRemoteSeek(targetTime);
           video.playbackRate = originalRate;
           video.muted = originalMuted;
-          suppressSyncEmitRef.current = false;
           speedSeekTimerRef.current = null;
         }, duration);
       },
@@ -373,12 +381,9 @@ export function PlayerPage(props: Props) {
 
         const video = videoRef.current;
         if (!video) return;
-        suppressSyncEmitRef.current = true;
+        suppressSyncEmitFor(500);
         video.pause();
         applyRemoteSeek(time);
-        window.setTimeout(() => {
-          suppressSyncEmitRef.current = false;
-        }, 500);
       },
       onStatusEvent: () => undefined,
     }
@@ -389,8 +394,8 @@ export function PlayerPage(props: Props) {
     try {
       await syncplay.createRoom();
       setPlayerError('');
-    } catch (err: any) {
-      setPlayerError(err?.message ?? 'Failed to create SyncPlay room');
+    } catch (err: unknown) {
+      setPlayerError(getErrorMessage(err, 'Failed to create SyncPlay room'));
     } finally {
       setSyncBusy(false);
     }
@@ -401,8 +406,8 @@ export function PlayerPage(props: Props) {
     try {
       await syncplay.joinRoom(code);
       setPlayerError('');
-    } catch (err: any) {
-      setPlayerError(err?.message ?? 'Failed to join SyncPlay room');
+    } catch (err: unknown) {
+      setPlayerError(getErrorMessage(err, 'Failed to join SyncPlay room'));
     } finally {
       setSyncBusy(false);
     }
@@ -437,7 +442,9 @@ export function PlayerPage(props: Props) {
 
   useEffect(() => {
     return () => {
-      if (subtitleUrl) URL.revokeObjectURL(subtitleUrl);
+      if (subtitleUrl && subtitleUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(subtitleUrl);
+      }
     };
   }, [subtitleUrl]);
 
@@ -571,8 +578,18 @@ export function PlayerPage(props: Props) {
 
     const onPlay = () => setPaused(false);
     const onPlaying = () => setPaused(false);
-    const onPause = () => setPaused(true);
-    const onEnded = () => setPaused(true);
+    const onPause = () => {
+      stallSentRef.current = false;
+      setPaused(true);
+    };
+    const onSeeking = () => {
+      stallSentRef.current = false;
+    };
+    const onEnded = () => {
+      setPaused(true);
+      const finalTime = sanitizeMediaTime(video.duration || video.currentTime || 0);
+      void onSaveProgress(finalTime);
+    };
     const onWaiting = () => {
       if (!shouldEmitStall || suppressSyncEmitRef.current) return;
       if (stallSentRef.current) return;
@@ -597,14 +614,18 @@ export function PlayerPage(props: Props) {
     };
     const onError = () => {
       const mediaError = video.error;
-      const code = mediaError?.code;
+      if (!mediaError) {
+        setPlayerError('Unknown playback error occurred in embedded player.');
+        return;
+      }
+      const code = mediaError.code;
       const map: Record<number, string> = {
         1: 'Playback was aborted.',
         2: 'Network error while loading video.',
         3: 'Video could not be decoded by the embedded player.',
         4: 'Video format is not supported by the embedded player.',
       };
-      setPlayerError(map[code ?? 0] ?? 'Unable to play this stream in the embedded player.');
+      setPlayerError(map[code] ?? `Media error (code ${code}): ${mediaError.message || 'unknown error'}`);
     };
 
     video.addEventListener('loadedmetadata', onLoadedMetadata);
@@ -613,6 +634,7 @@ export function PlayerPage(props: Props) {
     video.addEventListener('play', onPlay);
     video.addEventListener('playing', onPlaying);
     video.addEventListener('pause', onPause);
+    video.addEventListener('seeking', onSeeking);
     video.addEventListener('ended', onEnded);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('canplay', onCanPlay);
@@ -632,6 +654,7 @@ export function PlayerPage(props: Props) {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('pause', onPause);
+      video.removeEventListener('seeking', onSeeking);
       video.removeEventListener('ended', onEnded);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('canplay', onCanPlay);
@@ -639,7 +662,7 @@ export function PlayerPage(props: Props) {
       video.removeEventListener('progress', updateBuffered);
       clearStallDebounce();
     };
-  }, [clearStallDebounce, resumeFromSeconds, streamUrl, syncplay]);
+  }, [clearStallDebounce, onSaveProgress, resumeFromSeconds, streamUrl, syncplay]);
 
   const timePosRef = useRef(0);
   useEffect(() => { timePosRef.current = timePos; }, [timePos]);
@@ -699,6 +722,8 @@ export function PlayerPage(props: Props) {
     return Math.max(0, Math.min(100, (bufferedUntil / duration) * 100));
   }, [bufferedUntil, duration]);
 
+  const seekMax = useMemo(() => Math.max(1, Math.ceil(duration || 0)), [duration]);
+
   const togglePlayback = useCallback(() => {
     if (playbackTargetRef.current === 'mpv' && mpvRunning) {
       const doToggle = async () => {
@@ -729,9 +754,9 @@ export function PlayerPage(props: Props) {
 
     if (video.paused) {
       setPaused(false);
-      void video.play().catch((err: any) => {
+      void video.play().catch((err: unknown) => {
         setPaused(true);
-        setPlayerError(err?.message ?? 'Failed to start playback');
+        setPlayerError(getErrorMessage(err, 'Failed to start playback'));
       });
       // Emit AFTER triggering play so currentTime is accurate
       if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
@@ -831,8 +856,8 @@ export function PlayerPage(props: Props) {
       const { running } = await desktopApi.isPlayerRunning();
       setMpvRunning(Boolean(running));
       setPlayerError('');
-    } catch (err: any) {
-      setPlayerError(err?.message ?? 'Failed to open external player.');
+    } catch (err: unknown) {
+      setPlayerError(getErrorMessage(err, 'Failed to open external player.'));
     }
   }, [onOpenExternal]);
 
@@ -932,8 +957,8 @@ export function PlayerPage(props: Props) {
               className="plex-progress-input"
               type="range"
               min={0}
-              max={Math.max(1, Math.floor(duration || 0))}
-              value={Math.min(Math.floor(timePos || 0), Math.max(1, Math.floor(duration || 0)))}
+              max={seekMax}
+              value={Math.min(Math.floor(timePos || 0), seekMax)}
               onChange={e => {
                 const next = Number(e.target.value);
                 if (playbackTargetRef.current === 'mpv' && mpvRunning) {
@@ -1099,7 +1124,14 @@ export function PlayerPage(props: Props) {
                   <button key={track.id}
                     className={`settings-option ${selectedAudioTrackIndex === track.streamIndex ? 'active' : ''}`}
                     disabled={syncplay.isInRoom}
-                    onClick={() => { void onSelectAudioTrack(track.streamIndex, timePos); setSettingsMenuOpen(false); }}>
+                    onClick={() => {
+                      if (typeof track.streamIndex !== 'number' || track.streamIndex < 0) {
+                        setPlayerError('Invalid audio track');
+                        return;
+                      }
+                      void onSelectAudioTrack(track.streamIndex, timePos);
+                      setSettingsMenuOpen(false);
+                    }}>
                     {track.label || track.language || 'Unknown'} {selectedAudioTrackIndex === track.streamIndex ? '✓' : ''}
                   </button>
                 ))}

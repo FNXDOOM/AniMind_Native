@@ -176,14 +176,15 @@ export default function App() {
 
     setPlayerError('');
     setOpening(true);
+    const savedTime = Math.max(0, currentTime || 0);
     try {
       const ticket = streamIndex === null
         ? await desktopApi.getStreamTicket(currentEpisode.id)
         : await desktopApi.getStreamTicket(currentEpisode.id, streamIndex);
       setSelectedAudioTrackIndex(streamIndex);
       setStreamInfo(ticket);
+      setResumeFromSeconds(savedTime);
       setStreamUrl(ticket.url);
-      setResumeFromSeconds(Math.max(0, currentTime || 0));
     } catch (err: any) {
       setPlayerError(err?.message ?? 'Failed to switch audio track');
     } finally {
