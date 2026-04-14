@@ -35,14 +35,14 @@ export function useLibrary() {
     }
   }, []);
 
-  useEffect(() => {
-    void loadShows();
-  }, [loadShows]);
-
   const clearSelectedShow = useCallback(() => {
     setSelectedShow(null);
     setError('');
   }, []);
+
+  useEffect(() => {
+    void loadShows();
+  }, [loadShows]);
 
   return {
     shows,

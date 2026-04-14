@@ -83,3 +83,15 @@ export interface SetupStatus {
   ready: boolean;
   mpv: MpvAvailability;
 }
+
+export interface SyncplayParticipantState {
+  socketId: string;
+  userId: string;
+  displayName: string;
+  currentTime: number;
+  playbackRate: number;
+  readyState: 'buffering' | 'ready';
+  bufferedAhead: number;
+  ready: boolean;
+  stalling: boolean;
+}

@@ -1,5 +1,4 @@
-import { app, shell } from 'electron';
-import http from 'http';
+import { app } from 'electron';
 import { createClient, SupabaseClient, Session, User } from '@supabase/supabase-js';
 import { mkdir, readFile, writeFile, unlink } from 'fs/promises';
 import path from 'path';
@@ -22,6 +21,14 @@ function getSessionPath(): string {
 export class AuthService {
   private supabase: SupabaseClient | null = null;
   private session: Session | null = null;
+  private pendingGoogleSignIn:
+    | {
+        promise: Promise<{ user: User; accessToken: string }>;
+        resolve: (value: { user: User; accessToken: string }) => void;
+        reject: (reason?: unknown) => void;
+        timeout: ReturnType<typeof setTimeout>;
+      }
+    | null = null;
 
   private async getSupabase(): Promise<SupabaseClient> {
     if (this.supabase) return this.supabase;
@@ -86,136 +93,128 @@ export class AuthService {
     return { user: data.user, accessToken: data.session.access_token };
   }
 
-  async signInWithGoogle(): Promise<{ user: User; accessToken: string }> {
-    const supabase = await this.getSupabase();
-    
-    return new Promise((resolve, reject) => {
-      let server: http.Server | null = null;
-      let isSettled = false;
+  private createPendingGoogleSignIn(timeoutMs: number): Promise<{ user: User; accessToken: string }> {
+    if (this.pendingGoogleSignIn) {
+      throw new Error('Google Sign-In is already in progress. Finish that flow first.');
+    }
 
-      const cleanup = () => {
-        if (server) {
-          server.close();
-          server = null;
-        }
-      };
+    let resolveFn!: (value: { user: User; accessToken: string }) => void;
+    let rejectFn!: (reason?: unknown) => void;
 
-      const finish = (result: { user: User; accessToken: string }) => {
-        if (isSettled) return;
-        isSettled = true;
-        resolve(result);
-        cleanup();
-      };
-
-      const fail = (error: any) => {
-        if (isSettled) return;
-        isSettled = true;
-        reject(error);
-        cleanup();
-      };
-
-      server = http.createServer((req, res) => {
-        try {
-          const url = new URL(req.url || '/', 'http://localhost:43210');
-          
-          if (url.pathname === '/callback') {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(`
-              <!DOCTYPE html>
-              <html lang="en">
-              <head>
-                <meta charset="UTF-8">
-                <title>Authentication Completed</title>
-                <style>
-                  body { font-family: system-ui, -apple-system, sans-serif; background: #0b0f19; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                  .container { text-align: center; padding: 40px; background: #111827; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
-                  h1 { margin-bottom: 12px; color: #10c996; font-size: 24px; }
-                  p { color: #a1a1aa; font-size: 16px; margin: 0; }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <h1>Animind Desktop</h1>
-                  <p>Authentication processed successfully.</p>
-                  <p style="font-weight: bold; margin-top: 20px; color: #fff;">You can now safely close this browser window.</p>
-                </div>
-                <script>
-                  fetch('http://localhost:43210/exchange', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ hash: window.location.hash.substring(1) })
-                  }).catch(console.error);
-                </script>
-              </body>
-              </html>
-            `);
-          } else if (url.pathname === '/exchange' && req.method === 'POST') {
-            let body = '';
-            req.on('data', chunk => { body += chunk.toString(); });
-            req.on('end', async () => {
-              try {
-                res.setHeader('Access-Control-Allow-Origin', '*');
-                const parsed = JSON.parse(body);
-                const hashParams = new URLSearchParams(parsed.hash);
-                
-                const accessToken = hashParams.get('access_token');
-                const refreshToken = hashParams.get('refresh_token');
-
-                if (!accessToken || !refreshToken) {
-                  res.writeHead(400);
-                  res.end('Missing tokens');
-                  fail(new Error('Tokens missing from callback'));
-                  return;
-                }
-
-                const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-                
-                if (error || !data.user || !data.session) {
-                  res.writeHead(400);
-                  res.end('Session failed');
-                  fail(new Error(error?.message ?? 'Failed to finalize session'));
-                  return;
-                }
-
-                this.session = data.session;
-                await this.persistSession(data.session);
-
-                res.writeHead(200);
-                res.end('OK');
-                
-                finish({ user: data.user, accessToken: data.session.access_token });
-              } catch (e) {
-                console.error('[AuthServer] Exchange error:', e);
-                res.writeHead(500);
-                res.end('Internal error');
-                fail(e);
-              }
-            });
-          } else {
-            res.writeHead(404);
-            res.end();
-          }
-        } catch (err) {
-          fail(err);
-        }
-      });
-
-      server.on('error', err => fail(err));
-
-      server.listen(43210, async () => {
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: { redirectTo: 'http://localhost:43210/callback', skipBrowserRedirect: true },
-        });
-
-        if (error || !data.url) {
-          fail(new Error(error?.message ?? 'OAuth initialization failed'));
-          return;
-        }
-
-        await shell.openExternal(data.url);
-      });
+    const promise = new Promise<{ user: User; accessToken: string }>((resolve, reject) => {
+      resolveFn = resolve;
+      rejectFn = reject;
     });
+
+    const timeout = setTimeout(() => {
+      if (!this.pendingGoogleSignIn) return;
+      const pending = this.pendingGoogleSignIn;
+      this.pendingGoogleSignIn = null;
+      pending.reject(new Error('Google Sign-In timed out. Please try again.'));
+    }, timeoutMs);
+
+    this.pendingGoogleSignIn = {
+      promise,
+      resolve: resolveFn,
+      reject: rejectFn,
+      timeout,
+    };
+
+    return promise;
+  }
+
+  private resolvePendingGoogleSignIn(result: { user: User; accessToken: string }): void {
+    if (!this.pendingGoogleSignIn) return;
+    const pending = this.pendingGoogleSignIn;
+    this.pendingGoogleSignIn = null;
+    clearTimeout(pending.timeout);
+    pending.resolve(result);
+  }
+
+  private rejectPendingGoogleSignIn(error: unknown): void {
+    if (!this.pendingGoogleSignIn) return;
+    const pending = this.pendingGoogleSignIn;
+    this.pendingGoogleSignIn = null;
+    clearTimeout(pending.timeout);
+    pending.reject(error);
+  }
+
+  async signInWithGoogle(openExternal: (url: string) => Promise<void>): Promise<{ user: User; accessToken: string }> {
+    const supabase = await this.getSupabase();
+    const pending = this.createPendingGoogleSignIn(180000);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          skipBrowserRedirect: true,
+          redirectTo: 'animind://auth/callback',
+        },
+      });
+
+      if (error || !data.url) {
+        throw new Error(error?.message ?? 'Unable to start Google Sign-In.');
+      }
+
+      await openExternal(data.url);
+      return await pending;
+    } catch (error) {
+      this.rejectPendingGoogleSignIn(error);
+      throw error;
+    }
+  }
+
+  async handleAuthCallback(callbackUrl: string): Promise<boolean> {
+    let parsed: URL;
+    try {
+      parsed = new URL(callbackUrl);
+    } catch {
+      return false;
+    }
+
+    if (parsed.protocol !== 'animind:') return false;
+
+    const maybeAuthCallback =
+      parsed.hostname.toLowerCase() === 'auth'
+      || parsed.pathname.toLowerCase().includes('auth')
+      || parsed.pathname.toLowerCase().includes('callback')
+      || parsed.searchParams.has('code')
+      || parsed.searchParams.has('error');
+
+    if (!maybeAuthCallback) return false;
+
+    const providerError = parsed.searchParams.get('error_description') || parsed.searchParams.get('error');
+    if (providerError) {
+      let providerMessage = providerError;
+      try {
+        providerMessage = decodeURIComponent(providerError);
+      } catch {
+        // Keep the raw provider message if it's not URI-encoded.
+      }
+      const error = new Error(providerMessage);
+      this.rejectPendingGoogleSignIn(error);
+      throw error;
+    }
+
+    const code = parsed.searchParams.get('code');
+    if (!code) {
+      const error = new Error('Google Sign-In callback was missing an authorization code.');
+      this.rejectPendingGoogleSignIn(error);
+      throw error;
+    }
+
+    const supabase = await this.getSupabase();
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error || !data.session || !data.user) {
+      const exchangeError = new Error(error?.message ?? 'Failed to finish Google Sign-In session exchange.');
+      this.rejectPendingGoogleSignIn(exchangeError);
+      throw exchangeError;
+    }
+
+    this.session = data.session;
+    await this.persistSession(data.session);
+    this.resolvePendingGoogleSignIn({ user: data.user, accessToken: data.session.access_token });
+    return true;
   }
 
   async signOut(): Promise<void> {

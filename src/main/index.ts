@@ -11,6 +11,29 @@ import { progressService } from './services/progress.service';
 
 let mainWindow: BrowserWindow | null = null;
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const pendingProtocolUrls: string[] = [];
+
+function focusMainWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+}
+
+function extractProtocolUrl(args: string[]): string | null {
+  const value = args.find(arg => typeof arg === 'string' && arg.toLowerCase().startsWith('animind://'));
+  return value ?? null;
+}
+
+async function handleProtocolUrl(url: string): Promise<void> {
+  try {
+    const handled = await authService.handleAuthCallback(url);
+    if (handled) {
+      focusMainWindow();
+    }
+  } catch (error) {
+    console.error('[Auth] Failed to handle protocol callback URL:', error);
+  }
+}
 
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
@@ -24,6 +47,14 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 }
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  pendingProtocolUrls.push(url);
+  if (app.isReady()) {
+    void handleProtocolUrl(url);
+  }
+});
 
 const cacheDir = path.join(app.getPath('userData'), 'ChromiumCache');
 app.commandLine.appendSwitch('disk-cache-dir', cacheDir);
@@ -98,7 +129,9 @@ function registerIpcHandlers(): void {
   });
   
   ipcMain.handle('auth:google', async () => {
-    const result = await authService.signInWithGoogle();
+    const result = await authService.signInWithGoogle(async (url: string) => {
+      await shell.openExternal(url);
+    });
     return {
       userId: result.user.id,
       email: result.user.email ?? undefined,
@@ -110,6 +143,8 @@ function registerIpcHandlers(): void {
     await authService.signOut();
     return { ok: true };
   });
+  
+  ipcMain.handle('auth:token', async () => authService.getAccessToken());
 
   ipcMain.handle('library:shows', async () => libraryService.getShows());
   ipcMain.handle('library:showDetails', async (_event, showId: string) => libraryService.getShowDetails(showId));
@@ -146,6 +181,7 @@ function registerIpcHandlers(): void {
       return { paused: true, timePos: 0, duration: 0 };
     }
   });
+  ipcMain.handle('player:isRunning', async () => playerService.isRunning());
   ipcMain.handle('player:trackList', async () => {
     try {
       return await playerService.getTrackList();
@@ -185,18 +221,24 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
 
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
+  const startupProtocolUrl = extractProtocolUrl(process.argv);
+  if (startupProtocolUrl) {
+    void handleProtocolUrl(startupProtocolUrl);
+  }
 
-  app.on('open-url', (event) => {
-    event.preventDefault();
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+  if (pendingProtocolUrls.length > 0) {
+    const urls = [...pendingProtocolUrls];
+    pendingProtocolUrls.length = 0;
+    for (const url of urls) {
+      void handleProtocolUrl(url);
+    }
+  }
+
+  app.on('second-instance', (_event, commandLine) => {
+    focusMainWindow();
+    const protocolUrl = extractProtocolUrl(commandLine);
+    if (protocolUrl) {
+      void handleProtocolUrl(protocolUrl);
     }
   });
 

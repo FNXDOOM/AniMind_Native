@@ -250,6 +250,10 @@ export class PlayerService {
       duration: Number(durResp.data ?? 0),
     };
   }
+
+  async isRunning(): Promise<{ running: boolean }> {
+    return { running: this.mpvProcess !== null };
+  }
 }
 
 export const playerService = new PlayerService();

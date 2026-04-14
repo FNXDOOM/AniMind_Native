@@ -7,6 +7,7 @@ export const desktopApi = {
   testMpv: (pathOverride?: string) => window.animindDesktop.settings.testMpv(pathOverride),
 
   getSession: () => window.animindDesktop.auth.session() as Promise<SessionInfo | null>,
+  getAccessToken: () => window.animindDesktop.auth.token() as Promise<string | null>,
   signIn: (email: string, password: string) => window.animindDesktop.auth.signIn(email, password),
   signInWithGoogle: () => window.animindDesktop.auth.signInWithGoogle() as Promise<SessionInfo>,
   signOut: () => window.animindDesktop.auth.signOut(),
@@ -24,6 +25,7 @@ export const desktopApi = {
   stop: () => window.animindDesktop.player.stop(),
   seek: (seconds: number) => window.animindDesktop.player.seek(seconds),
   getPlayerState: () => window.animindDesktop.player.getState(),
+  isPlayerRunning: () => window.animindDesktop.player.isRunning() as Promise<{ running: boolean }>,
   getTrackList: () => window.animindDesktop.player.getTrackList(),
   setAudioTrack: (trackId: number) => window.animindDesktop.player.setAudioTrack(trackId),
   setSubtitleTrack: (trackId: number | 'no') => window.animindDesktop.player.setSubtitleTrack(trackId),

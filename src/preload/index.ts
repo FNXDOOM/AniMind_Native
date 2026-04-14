@@ -12,6 +12,7 @@ const api = {
     signIn: (email: string, password: string) => ipcRenderer.invoke('auth:signin', { email, password }),
     signInWithGoogle: () => ipcRenderer.invoke('auth:google'),
     signOut: () => ipcRenderer.invoke('auth:signout'),
+    token: () => ipcRenderer.invoke('auth:token'),
   },
   library: {
     getShows: () => ipcRenderer.invoke('library:shows'),
@@ -28,6 +29,7 @@ const api = {
     stop: () => ipcRenderer.invoke('player:stop'),
     seek: (seconds: number) => ipcRenderer.invoke('player:seek', seconds),
     getState: () => ipcRenderer.invoke('player:state'),
+    isRunning: () => ipcRenderer.invoke('player:isRunning'),
     getTrackList: () => ipcRenderer.invoke('player:trackList'),
     setAudioTrack: (trackId: number) => ipcRenderer.invoke('player:setAudioTrack', trackId),
     setSubtitleTrack: (trackId: number | 'no') => ipcRenderer.invoke('player:setSubtitleTrack', trackId),

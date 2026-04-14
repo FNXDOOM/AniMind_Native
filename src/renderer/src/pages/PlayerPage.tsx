@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AudioTrack, Episode, SubtitleTrack } from '../types';
+import type { PendingSync } from '../App';
+import { useSyncplay } from '../hooks/useSyncplay';
+import { SyncplayPanel } from '../components/SyncplayPanel';
+import { desktopApi } from '../api';
 
 type IconProps = { className?: string };
 
 type Props = {
+  currentUserId: string;
   animeId: string;
   animeTitle: string;
   episode: Episode;
@@ -15,6 +20,8 @@ type Props = {
   loading: boolean;
   subtitles: SubtitleTrack[];
   error: string;
+  pendingSync: PendingSync;
+  onSyncConsumed: () => void;
   onSelectAudioTrack: (streamIndex: number | null, currentTime: number) => Promise<unknown>;
   onSaveProgress: (seconds: number) => Promise<unknown>;
   onOpenExternal: () => Promise<unknown>;
@@ -30,6 +37,11 @@ function normalizeSubtitleContent(content: string): string {
     .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
 
   return `WEBVTT\n\n${normalized}`;
+}
+
+function sanitizeMediaTime(value: number): number {
+  if (!Number.isFinite(value) || Number.isNaN(value)) return 0;
+  return Math.max(0, value);
 }
 
 function PlayIcon({ className }: IconProps) {
@@ -88,6 +100,14 @@ function SettingsIcon({ className }: IconProps) {
   );
 }
 
+function SyncIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path fill="currentColor" d="M12 5a7 7 0 0 1 6.36 4H16v2h5V6h-2v1.26A9 9 0 0 0 3 12h2a7 7 0 0 1 7-7zm7 7a7 7 0 0 1-7 7 7 7 0 0 1-6.36-4H8v-2H3v5h2v-1.26A9 9 0 0 0 21 12z" />
+    </svg>
+  );
+}
+
 function PopoutIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
@@ -115,6 +135,7 @@ function FullscreenExitIcon({ className }: IconProps) {
 
 export function PlayerPage(props: Props) {
   const {
+    currentUserId,
     animeTitle,
     episode,
     streamInfo,
@@ -125,6 +146,8 @@ export function PlayerPage(props: Props) {
     loading,
     subtitles,
     error,
+    pendingSync,
+    onSyncConsumed,
     onSelectAudioTrack,
     onSaveProgress,
     onOpenExternal,
@@ -150,6 +173,257 @@ export function PlayerPage(props: Props) {
   const [isMuted, setIsMuted] = useState(false);
   const [bufferedUntil, setBufferedUntil] = useState(0);
 
+  const [playbackTarget, setPlaybackTarget] = useState<'html5' | 'mpv'>('html5');
+  const [mpvRunning, setMpvRunning] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
+  const suppressSyncEmitRef = useRef(false);
+  const playbackTargetRef = useRef<'html5' | 'mpv'>('html5');
+  const speedSeekTimerRef = useRef<number | null>(null);
+  const stallDebounceRef = useRef<number | null>(null);
+  const stallSentRef = useRef(false);
+
+  // Keep ref in sync with state so callbacks always read latest value
+  useEffect(() => { playbackTargetRef.current = playbackTarget; }, [playbackTarget]);
+
+  const clearSpeedSeekTimer = useCallback(() => {
+    if (speedSeekTimerRef.current !== null) {
+      window.clearTimeout(speedSeekTimerRef.current);
+      speedSeekTimerRef.current = null;
+    }
+  }, []);
+
+  const clearStallDebounce = useCallback(() => {
+    if (stallDebounceRef.current !== null) {
+      window.clearTimeout(stallDebounceRef.current);
+      stallDebounceRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let timer: number;
+    const pollMpv = async () => {
+      try {
+        const { running } = await desktopApi.isPlayerRunning();
+        setMpvRunning(running);
+        if (running && playbackTargetRef.current === 'mpv') {
+          const state = await desktopApi.getPlayerState();
+          setPaused(Boolean(state.paused));
+          setTimePos(sanitizeMediaTime(Number(state.timePos ?? 0)));
+          setDuration(sanitizeMediaTime(Number(state.duration ?? 0)));
+          setBufferedUntil(0);
+        } else if (playbackTargetRef.current === 'html5') {
+          const video = videoRef.current;
+          if (video) {
+            setPaused(video.paused);
+            setTimePos(sanitizeMediaTime(video.currentTime));
+            setDuration(sanitizeMediaTime(video.duration));
+          }
+        }
+      } catch {
+        setMpvRunning(false);
+      }
+      timer = window.setTimeout(pollMpv, 250);
+    };
+    void pollMpv();
+    return () => clearTimeout(timer);
+  }, []);
+
+  const getBufferedAhead = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return 0;
+    try {
+      if (!video.buffered.length) return 0;
+      const t = video.currentTime;
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (t >= video.buffered.start(i) && t <= video.buffered.end(i)) {
+          return video.buffered.end(i) - t;
+        }
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const applyRemoteSeek = useCallback((time: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    suppressSyncEmitRef.current = true;
+    video.currentTime = Math.max(0, Math.min(video.duration || Number.MAX_SAFE_INTEGER, time));
+    window.setTimeout(() => {
+      suppressSyncEmitRef.current = false;
+    }, 250);
+  }, []);
+
+  const syncplay = useSyncplay(
+    episode.id,
+    async () => {
+      if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+        try {
+          const state = await desktopApi.getPlayerState();
+          return {
+            currentTime: Number(state.timePos ?? 0),
+            playbackRate: 1,
+            bufferedAhead: 0,
+          };
+        } catch {
+          return {
+            currentTime: 0,
+            playbackRate: 1,
+            bufferedAhead: 0,
+          };
+        }
+      }
+
+      const video = videoRef.current;
+      return {
+        currentTime: video?.currentTime ?? 0,
+        playbackRate: video?.playbackRate ?? 1,
+        bufferedAhead: getBufferedAhead(),
+      };
+    },
+    {
+      onRemotePlay: (time, scheduledPlayAt) => {
+        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+          const delay = Math.max(0, scheduledPlayAt - Date.now());
+          window.setTimeout(() => {
+            void desktopApi.seek(time)
+              .then(() => desktopApi.play())
+              .catch(() => undefined);
+          }, delay);
+          return;
+        }
+
+        const video = videoRef.current;
+        if (!video) return;
+        applyRemoteSeek(time);
+        const delay = Math.max(0, scheduledPlayAt - Date.now());
+        window.setTimeout(() => {
+          suppressSyncEmitRef.current = true;
+          void video.play().catch(() => undefined).finally(() => {
+            window.setTimeout(() => {
+              suppressSyncEmitRef.current = false;
+            }, 250);
+          });
+        }, delay);
+      },
+      onRemotePause: (time) => {
+        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+          void desktopApi.seek(time)
+            .then(() => desktopApi.pause())
+            .catch(() => undefined);
+          return;
+        }
+
+        const video = videoRef.current;
+        if (!video) return;
+        applyRemoteSeek(time);
+        suppressSyncEmitRef.current = true;
+        video.pause();
+        window.setTimeout(() => {
+          suppressSyncEmitRef.current = false;
+        }, 250);
+      },
+      onRemoteSeek: (time) => {
+        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+          void desktopApi.seek(time).catch(() => undefined);
+          return;
+        }
+        applyRemoteSeek(time);
+      },
+      onSoftCorrect: (time) => {
+        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+          void desktopApi.seek(time).catch(() => undefined);
+          return;
+        }
+        applyRemoteSeek(time);
+      },
+      onSpeedSeek: (rate, duration, targetTime) => {
+        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+          void desktopApi.seek(targetTime).catch(() => undefined);
+          return;
+        }
+
+        const video = videoRef.current;
+        if (!video) return;
+
+        clearSpeedSeekTimer();
+        const originalRate = video.playbackRate;
+        const originalMuted = video.muted;
+
+        suppressSyncEmitRef.current = true;
+        video.playbackRate = rate;
+        video.muted = true;
+        speedSeekTimerRef.current = window.setTimeout(() => {
+          applyRemoteSeek(targetTime);
+          video.playbackRate = originalRate;
+          video.muted = originalMuted;
+          suppressSyncEmitRef.current = false;
+          speedSeekTimerRef.current = null;
+        }, duration);
+      },
+      onWaitForBufferGoal: (time) => {
+        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+          void desktopApi.pause()
+            .then(() => desktopApi.seek(time))
+            .catch(() => undefined);
+          return;
+        }
+
+        const video = videoRef.current;
+        if (!video) return;
+        suppressSyncEmitRef.current = true;
+        video.pause();
+        applyRemoteSeek(time);
+        window.setTimeout(() => {
+          suppressSyncEmitRef.current = false;
+        }, 500);
+      },
+      onStatusEvent: () => undefined,
+    }
+  );
+
+  const handleCreateRoom = useCallback(async () => {
+    setSyncBusy(true);
+    try {
+      await syncplay.createRoom();
+      setPlayerError('');
+    } catch (err: any) {
+      setPlayerError(err?.message ?? 'Failed to create SyncPlay room');
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [syncplay]);
+
+  const handleJoinRoom = useCallback(async (code: string) => {
+    setSyncBusy(true);
+    try {
+      await syncplay.joinRoom(code);
+      setPlayerError('');
+    } catch (err: any) {
+      setPlayerError(err?.message ?? 'Failed to join SyncPlay room');
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [syncplay]);
+
+  useEffect(() => {
+    if (pendingSync || syncplay.isInRoom || Boolean(syncplay.error)) {
+      setSyncPanelOpen(true);
+    }
+  }, [pendingSync, syncplay.isInRoom, syncplay.error]);
+
+  useEffect(() => {
+    if (!pendingSync) return;
+    onSyncConsumed();
+    if (pendingSync.type === 'join') {
+      void handleJoinRoom(pendingSync.code);
+      return;
+    }
+    void handleCreateRoom();
+  }, [pendingSync, onSyncConsumed, handleCreateRoom, handleJoinRoom]);
+
   const selectedSubtitle = useMemo(
     () => subtitles.find(s => s.id === selectedSubtitleId) ?? null,
     [selectedSubtitleId, subtitles],
@@ -166,6 +440,45 @@ export function PlayerPage(props: Props) {
       if (subtitleUrl) URL.revokeObjectURL(subtitleUrl);
     };
   }, [subtitleUrl]);
+
+  useEffect(() => {
+    playbackTargetRef.current = playbackTarget;
+  }, [playbackTarget]);
+
+  useEffect(() => {
+    return () => {
+      clearSpeedSeekTimer();
+      clearStallDebounce();
+    };
+  }, [clearSpeedSeekTimer, clearStallDebounce]);
+
+  useEffect(() => {
+    if (!syncplay.isInRoom || !syncplay.inBufferGate) return;
+
+    if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+      const timer = window.setTimeout(() => {
+        syncplay.reportReady();
+      }, 500);
+      return () => window.clearTimeout(timer);
+    }
+
+    let readyReported = false;
+    const reportTimer = window.setInterval(() => {
+      const ahead = getBufferedAhead();
+      const goal = Math.max(1, syncplay.bufferGoalSeconds);
+      const percent = Math.min(100, (ahead / goal) * 100);
+      syncplay.reportBufferingProgress(ahead, percent);
+
+      if (!readyReported && ahead >= goal) {
+        readyReported = true;
+        syncplay.reportReady();
+      }
+    }, 1000);
+
+    return () => {
+      window.clearInterval(reportTimer);
+    };
+  }, [getBufferedAhead, mpvRunning, syncplay]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -186,7 +499,7 @@ export function PlayerPage(props: Props) {
 
   const scheduleHideControls = useCallback(() => {
     clearHideControlsTimer();
-    if (paused || settingsMenuOpen) {
+    if (paused || settingsMenuOpen || syncPanelOpen) {
       setControlsVisible(true);
       return;
     }
@@ -194,7 +507,7 @@ export function PlayerPage(props: Props) {
     hideControlsTimerRef.current = window.setTimeout(() => {
       setControlsVisible(false);
     }, 2000);
-  }, [clearHideControlsTimer, paused, settingsMenuOpen]);
+  }, [clearHideControlsTimer, paused, settingsMenuOpen, syncPanelOpen]);
 
   const signalInteraction = useCallback(() => {
     setControlsVisible(true);
@@ -224,6 +537,7 @@ export function PlayerPage(props: Props) {
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamUrl) return;
+    const shouldEmitStall = syncplay.isInRoom && playbackTargetRef.current === 'html5';
 
     const updateBuffered = () => {
       try {
@@ -241,21 +555,46 @@ export function PlayerPage(props: Props) {
       if (resumeFromSeconds > 0) {
         video.currentTime = Math.max(0, Math.min(resumeFromSeconds, video.duration || resumeFromSeconds));
       }
+      setDuration(sanitizeMediaTime(video.duration));
       updateBuffered();
     };
 
     const onTimeUpdate = () => {
-      setTimePos(video.currentTime || 0);
+      setTimePos(sanitizeMediaTime(video.currentTime));
+      setDuration(sanitizeMediaTime(video.duration));
       updateBuffered();
     };
 
     const onDurationChange = () => {
-      setDuration(video.duration || 0);
+      setDuration(sanitizeMediaTime(video.duration));
     };
 
     const onPlay = () => setPaused(false);
+    const onPlaying = () => setPaused(false);
     const onPause = () => setPaused(true);
     const onEnded = () => setPaused(true);
+    const onWaiting = () => {
+      if (!shouldEmitStall || suppressSyncEmitRef.current) return;
+      if (stallSentRef.current) return;
+
+      clearStallDebounce();
+      stallDebounceRef.current = window.setTimeout(() => {
+        if (!shouldEmitStall || suppressSyncEmitRef.current) return;
+        syncplay.emitBuffering();
+        stallSentRef.current = true;
+      }, 700);
+    };
+    const onCanPlay = () => {
+      clearStallDebounce();
+      if (!shouldEmitStall) {
+        stallSentRef.current = false;
+        return;
+      }
+      if (stallSentRef.current) {
+        syncplay.emitStallRecovered();
+      }
+      stallSentRef.current = false;
+    };
     const onError = () => {
       const mediaError = video.error;
       const code = mediaError?.code;
@@ -272,8 +611,11 @@ export function PlayerPage(props: Props) {
     video.addEventListener('timeupdate', onTimeUpdate);
     video.addEventListener('durationchange', onDurationChange);
     video.addEventListener('play', onPlay);
+    video.addEventListener('playing', onPlaying);
     video.addEventListener('pause', onPause);
     video.addEventListener('ended', onEnded);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('canplay', onCanPlay);
     video.addEventListener('error', onError);
     video.addEventListener('progress', updateBuffered);
 
@@ -288,20 +630,27 @@ export function PlayerPage(props: Props) {
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('durationchange', onDurationChange);
       video.removeEventListener('play', onPlay);
+      video.removeEventListener('playing', onPlaying);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('ended', onEnded);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
       video.removeEventListener('progress', updateBuffered);
+      clearStallDebounce();
     };
-  }, [streamUrl, resumeFromSeconds]);
+  }, [clearStallDebounce, resumeFromSeconds, streamUrl, syncplay]);
+
+  const timePosRef = useRef(0);
+  useEffect(() => { timePosRef.current = timePos; }, [timePos]);
 
   useEffect(() => {
     const saveTimer = window.setInterval(() => {
-      void onSaveProgress(timePos);
+      void onSaveProgress(timePosRef.current);
     }, 10000);
 
     return () => window.clearInterval(saveTimer);
-  }, [onSaveProgress, timePos]);
+  }, [onSaveProgress]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -317,6 +666,7 @@ export function PlayerPage(props: Props) {
   }, [speed]);
 
   const formatTime = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || Number.isNaN(seconds)) return '0:00';
     const s = Math.max(0, Math.floor(seconds || 0));
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -350,24 +700,82 @@ export function PlayerPage(props: Props) {
   }, [bufferedUntil, duration]);
 
   const togglePlayback = useCallback(() => {
+    if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+      const doToggle = async () => {
+        try {
+          const state = await desktopApi.getPlayerState();
+          if (state.paused) {
+            await desktopApi.play();
+            if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+              syncplay.emitPlay(state.timePos || 0);
+            }
+            return;
+          }
+
+          await desktopApi.pause();
+          if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+            syncplay.emitPause(state.timePos || 0);
+          }
+        } catch {
+          setPlayerError('MPV is not running. Open external player first.');
+        }
+      };
+      void doToggle();
+      return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
 
     if (video.paused) {
+      setPaused(false);
       void video.play().catch((err: any) => {
+        setPaused(true);
         setPlayerError(err?.message ?? 'Failed to start playback');
       });
+      // Emit AFTER triggering play so currentTime is accurate
+      if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+        window.setTimeout(() => {
+          if (videoRef.current && syncplay.isInRoom && !suppressSyncEmitRef.current) {
+            syncplay.emitPlay(videoRef.current.currentTime || 0);
+          }
+        }, 0);
+      }
       return;
     }
 
+    if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+      syncplay.emitPause(video.currentTime || 0);
+    }
     video.pause();
-  }, []);
+  }, [mpvRunning, syncplay]);
 
   const seekBy = useCallback((delta: number) => {
+    if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+      const doSeek = async () => {
+        try {
+          const state = await desktopApi.getPlayerState();
+          const next = Math.max(0, (state.timePos || 0) + delta);
+          await desktopApi.seek(next);
+          if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+            syncplay.emitSeek(next);
+          }
+        } catch {
+          setPlayerError('Unable to seek MPV player.');
+        }
+      };
+      void doSeek();
+      return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
-    video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta));
-  }, []);
+    const next = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta));
+    video.currentTime = next;
+    if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+      syncplay.emitSeek(next);
+    }
+  }, [mpvRunning, syncplay]);
 
   const toggleFullscreen = useCallback(async () => {
     const shell = shellRef.current;
@@ -416,10 +824,31 @@ export function PlayerPage(props: Props) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [seekBy, signalInteraction, toggleFullscreen, togglePlayback]);
 
+  const handleOpenExternalPlayer = useCallback(async () => {
+    try {
+      await onOpenExternal();
+      setPlaybackTarget('mpv');
+      const { running } = await desktopApi.isPlayerRunning();
+      setMpvRunning(Boolean(running));
+      setPlayerError('');
+    } catch (err: any) {
+      setPlayerError(err?.message ?? 'Failed to open external player.');
+    }
+  }, [onOpenExternal]);
+
+  const showCenterPlay = paused
+    && !loading
+    && !error
+    && !playerError
+    && playbackTargetRef.current === 'html5'
+    && Boolean(streamUrl);
+
+  const durationLabel = duration > 0 ? formatTime(duration) : '--:--';
+
   return (
     <div
       ref={shellRef}
-      className="video-shell"
+      className={`video-shell ${controlsVisible || settingsMenuOpen || syncPanelOpen ? 'player-controls-visible' : ''}`}
       style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#000', cursor: controlsVisible ? 'default' : 'none' }}
       onMouseMove={signalInteraction}
       onMouseEnter={signalInteraction}
@@ -456,7 +885,7 @@ export function PlayerPage(props: Props) {
         ) : null}
       </video>
 
-      {paused ? (
+      {showCenterPlay ? (
         <button
           className="center-play-btn"
           title="Play"
@@ -506,9 +935,20 @@ export function PlayerPage(props: Props) {
               max={Math.max(1, Math.floor(duration || 0))}
               value={Math.min(Math.floor(timePos || 0), Math.max(1, Math.floor(duration || 0)))}
               onChange={e => {
-                const video = videoRef.current;
-                if (!video) return;
-                video.currentTime = Number(e.target.value);
+                const next = Number(e.target.value);
+                if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+                  void desktopApi.seek(next).catch(() => {
+                    setPlayerError('Unable to seek MPV player.');
+                  });
+                } else {
+                  const video = videoRef.current;
+                  if (!video) return;
+                  video.currentTime = next;
+                }
+
+                if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+                  syncplay.emitSeek(next);
+                }
                 signalInteraction();
               }}
             />
@@ -542,7 +982,7 @@ export function PlayerPage(props: Props) {
                   }}
                 />
               </label>
-              <span className="time-readout">{formatTime(timePos)} / {formatTime(duration)}</span>
+              <span className="time-readout">{formatTime(timePos)} / {durationLabel}</span>
             </div>
 
             <div className="row gap-sm align-center">
@@ -555,7 +995,51 @@ export function PlayerPage(props: Props) {
               >
                 <SettingsIcon className="control-icon" />
               </button>
-              <button className="ghost-btn" style={{ width: 36, height: 36 }} onClick={() => void onOpenExternal()} title="External player">
+              <div style={{ position: 'relative', display: 'flex' }}>
+                <button
+                  className="ghost-btn"
+                  style={{ width: 36, height: 36, borderColor: syncPanelOpen ? 'var(--accent)' : undefined }}
+                  onClick={() => setSyncPanelOpen(v => !v)}
+                  title={syncPanelOpen ? 'Hide SyncPlay' : 'Show SyncPlay'}
+                >
+                  <SyncIcon className="control-icon" />
+                </button>
+
+                {syncPanelOpen ? (
+                  <div style={{
+                    position: 'absolute',
+                    right: 0,
+                    bottom: 'calc(100% + 10px)',
+                    zIndex: 12,
+                    width: 300,
+                    maxWidth: 'min(320px, 80vw)',
+                    pointerEvents: 'auto',
+                  }}>
+                    <SyncplayPanel
+                      roomCode={syncplay.roomCode}
+                      hostUserId={syncplay.hostUserId}
+                      selfUserId={currentUserId}
+                      peers={syncplay.peers}
+                      status={syncplay.status}
+                      error={syncplay.error}
+                      inBufferGate={syncplay.inBufferGate}
+                      readyCount={syncplay.readyCount}
+                      totalPeers={syncplay.totalPeers}
+                      isWorking={syncBusy}
+                      onCreateRoom={handleCreateRoom}
+                      onJoinRoom={handleJoinRoom}
+                      onLeaveRoom={syncplay.leaveRoom}
+                      onTransferHost={syncplay.transferHost}
+                      onRequestSync={syncplay.requestSync}
+                      onClearError={syncplay.clearError}
+                      playbackTarget={playbackTarget}
+                      onPlaybackTargetChange={setPlaybackTarget}
+                      mpvRunning={mpvRunning}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              <button className="ghost-btn" style={{ width: 36, height: 36 }} onClick={() => void handleOpenExternalPlayer()} title="External player">
                 <PopoutIcon className="control-icon" />
               </button>
               <button className="ghost-btn" style={{ width: 36, height: 36 }} onClick={() => void toggleFullscreen()} title="Fullscreen">
@@ -592,8 +1076,10 @@ export function PlayerPage(props: Props) {
 
             {settingsTab === 'playback' ? (
               <div className="settings-option-list">
+                {syncplay.isInRoom ? <p className="muted" style={{fontSize: 12}}>Playback speed is locked during SyncPlay.</p> : null}
                 {[0.75, 1, 1.25, 1.5, 2].map(value => (
                   <button key={value} className={`settings-option ${speed === value ? 'active' : ''}`}
+                    disabled={syncplay.isInRoom}
                     onClick={() => { setSpeed(value); setSettingsMenuOpen(false); }}>
                     {value.toFixed(value % 1 === 0 ? 1 : 2)}x
                   </button>
@@ -603,13 +1089,16 @@ export function PlayerPage(props: Props) {
 
             {settingsTab === 'audio' ? (
               <div className="settings-option-list">
+                {syncplay.isInRoom ? <p className="muted" style={{fontSize: 12}}>Audio switching disabled during SyncPlay.</p> : null}
                 <button className={`settings-option ${selectedAudioTrackIndex === null ? 'active' : ''}`}
+                  disabled={syncplay.isInRoom}
                   onClick={() => { void onSelectAudioTrack(null, timePos); setSettingsMenuOpen(false); }}>
                   Default {selectedAudioTrackIndex === null ? '✓' : ''}
                 </button>
                 {audioTracks.map(track => (
                   <button key={track.id}
                     className={`settings-option ${selectedAudioTrackIndex === track.streamIndex ? 'active' : ''}`}
+                    disabled={syncplay.isInRoom}
                     onClick={() => { void onSelectAudioTrack(track.streamIndex, timePos); setSettingsMenuOpen(false); }}>
                     {track.label || track.language || 'Unknown'} {selectedAudioTrackIndex === track.streamIndex ? '✓' : ''}
                   </button>
@@ -635,6 +1124,7 @@ export function PlayerPage(props: Props) {
           </div>
         </div>
       ) : null}
+
     </div>
   );
 }

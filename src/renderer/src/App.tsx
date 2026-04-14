@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { desktopApi } from './api';
 import { useLibrary } from './hooks/useLibrary';
 import type { AppSettings, AudioTrack, Episode, MpvAvailability, SessionInfo, SetupStatus, StreamTicket, SubtitleTrack } from './types';
@@ -10,12 +10,50 @@ import { FirstRunSetupPage } from './pages/FirstRunSetupPage';
 
 type View = 'library' | 'player' | 'settings';
 
+// Room code the user wants to join *before* hitting play — carried into the player on launch
+export type PendingSync = { type: 'join'; code: string } | { type: 'create' } | null;
+
+// Small sidebar component: lets another user type a room code and join a friend's watch party
+function SidebarSyncJoin({ onJoin }: { onJoin: (code: string) => void }) {
+  const [code, setCode] = React.useState('');
+  const trimmed = code.trim().toUpperCase();
+
+  return (
+    <div style={{
+      margin: '24px 0 0',
+      padding: '14px',
+      background: 'rgba(255,255,255,0.03)',
+      border: '1px solid rgba(255,255,255,0.07)',
+      borderRadius: 10,
+    }}>
+      <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Join Watch Party</p>
+      <input
+        value={code}
+        onChange={e => setCode(e.target.value.slice(0, 5))}
+        placeholder="Room code"
+        maxLength={5}
+        style={{ marginBottom: 8, fontSize: 13, padding: '8px 10px', textTransform: 'uppercase', letterSpacing: '0.15em' }}
+      />
+      <button
+        className="primary-btn"
+        style={{ width: '100%', fontSize: 13, padding: '8px' }}
+        disabled={trimmed.length < 5}
+        onClick={() => { onJoin(trimmed); setCode(''); }}
+      >
+        Join Room
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [authError, setAuthError] = useState('');
   const [view, setView] = useState<View>('library');
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [setupInitError, setSetupInitError] = useState('');
+
+  const [pendingSync, setPendingSync] = useState<PendingSync>(null);
 
   const [currentAnimeId, setCurrentAnimeId] = useState<string | null>(null);
   const [currentAnimeTitle, setCurrentAnimeTitle] = useState('');
@@ -95,13 +133,16 @@ export default function App() {
     setView('library');
   }, []);
 
-  const startEpisode = useCallback(async (animeId: string, animeTitle: string, episode: Episode) => {
+  const startEpisode = useCallback(async (animeId: string, animeTitle: string, episode: Episode, sync?: PendingSync) => {
     setPlayerError('');
     setOpening(true);
+    // Capture episodes snapshot NOW before any async gap (fixes stale selectedShow closure)
+    const episodesSnapshot = selectedShow?.anime.id === animeId ? selectedShow.episodes : null;
     try {
       setCurrentAnimeId(animeId);
       setCurrentAnimeTitle(animeTitle);
       setCurrentEpisode(episode);
+      if (sync !== undefined) setPendingSync(sync);
 
       const ticket = await desktopApi.getStreamTicket(episode.id);
       setStreamInfo(ticket);
@@ -115,7 +156,7 @@ export default function App() {
       setCloudSubtitles(subtitles);
       setAudioTracks(tracks ?? []);
 
-      const selectedIdx = selectedShow?.episodes.findIndex(e => e.id === episode.id) ?? -1;
+      const selectedIdx = episodesSnapshot?.findIndex(e => e.id === episode.id) ?? -1;
       if (selectedIdx >= 0) {
         const saved = await desktopApi.getProgress(animeId, selectedIdx);
         setResumeFromSeconds(saved > 0 ? saved : 0);
@@ -209,6 +250,7 @@ export default function App() {
       {/* Full-screen immersive player — rendered outside the shell so nothing clips it */}
       {view === 'player' && currentEpisode && currentAnimeId ? (
         <PlayerPage
+          currentUserId={session.userId}
           animeId={currentAnimeId}
           animeTitle={currentAnimeTitle}
           episode={currentEpisode}
@@ -220,6 +262,8 @@ export default function App() {
           loading={opening}
           subtitles={cloudSubtitles}
           error={playerError}
+          pendingSync={pendingSync}
+          onSyncConsumed={() => setPendingSync(null)}
           onSelectAudioTrack={(trackIndex, timePos) => switchAudioTrack(trackIndex, timePos)}
           onSaveProgress={seconds => saveProgress(seconds)}
           onOpenExternal={() => openInExternalPlayer()}
@@ -236,6 +280,11 @@ export default function App() {
               <button title="Settings" className={`nav-icon-btn ${view === 'settings' ? 'active' : ''}`} onClick={openSettings}>Settings</button>
             </nav>
 
+            {/* Sidebar quick-join: join an existing SyncPlay room before picking an episode */}
+            <SidebarSyncJoin
+              onJoin={(code) => setPendingSync({ type: 'join', code })}
+            />
+
             <div className="sidebar-bottom">
               <button title="Sign Out" className="nav-icon-btn danger-btn" onClick={() => void signOut()}>Sign Out</button>
             </div>
@@ -251,9 +300,11 @@ export default function App() {
                   loadingShows={loadingShows}
                   loadingDetails={loadingDetails}
                   error={error || playerError}
+                  pendingSync={pendingSync}
                   onSelectShow={showId => void loadShowDetails(showId)}
                   onClearShow={clearSelectedShow}
                   onPlayEpisode={(animeId, animeTitle, episode) => void startEpisode(animeId, animeTitle, episode)}
+                  onWatchTogether={(animeId, animeTitle, episode, sync) => void startEpisode(animeId, animeTitle, episode, sync)}
                 />
               )}
 

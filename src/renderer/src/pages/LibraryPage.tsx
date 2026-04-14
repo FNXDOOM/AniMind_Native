@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Episode, Show, ShowDetails } from '../types';
+import type { PendingSync } from '../App';
 
 interface CastMember {
   name: string;
@@ -13,9 +14,11 @@ type Props = {
   loadingShows: boolean;
   loadingDetails: boolean;
   error: string;
+  pendingSync: PendingSync;
   onSelectShow: (showId: string) => void;
   onClearShow: () => void;
   onPlayEpisode: (animeId: string, animeTitle: string, episode: Episode) => void;
+  onWatchTogether: (animeId: string, animeTitle: string, episode: Episode, sync: PendingSync) => void;
 };
 
 export function LibraryPage({
@@ -24,9 +27,11 @@ export function LibraryPage({
   loadingShows,
   loadingDetails,
   error,
+  pendingSync,
   onSelectShow,
   onClearShow,
   onPlayEpisode,
+  onWatchTogether,
 }: Props) {
   const [query, setQuery] = useState('');
   const episodesRef = useRef<HTMLDivElement | null>(null);
@@ -132,6 +137,39 @@ export function LibraryPage({
                     <button className="primary-btn" onClick={() => { if(details.episodes.length) onPlayEpisode(details.anime.id, details.anime.title, details.episodes[0]) }} style={{ padding: '12px 32px', fontSize: 16 }}>
                        ▶ Play
                     </button>
+                    {/* Watch Together: create a new SyncPlay room for this anime */}
+                    <button
+                      onClick={() => {
+                        if (!details.episodes.length) return;
+                        onWatchTogether(details.anime.id, details.anime.title, details.episodes[0], { type: 'create' });
+                      }}
+                      style={{
+                        padding: '12px 20px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8,
+                        background: 'rgba(16,201,150,0.1)', border: '1px solid rgba(16,201,150,0.35)',
+                        color: 'var(--accent)', borderRadius: 10, cursor: 'pointer',
+                      }}
+                      title="Create a SyncPlay room and watch together with friends"
+                    >
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                      Watch Together
+                    </button>
+                    {pendingSync?.type === 'join' && (
+                      <button
+                        onClick={() => {
+                          if (!details.episodes.length) return;
+                          onWatchTogether(details.anime.id, details.anime.title, details.episodes[0], pendingSync);
+                        }}
+                        style={{
+                          padding: '12px 20px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 8,
+                          background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.35)',
+                          color: '#60a5fa', borderRadius: 10, cursor: 'pointer',
+                        }}
+                        title={`Join room ${pendingSync.code} and watch`}
+                      >
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+                        Join Room {pendingSync.code}
+                      </button>
+                    )}
                     <button className="ghost-btn" title="Add to List" style={{ outline: '2px solid rgba(255,255,255,0.1)' }}>♥</button>
                     <button className="ghost-btn" title="Mark as Watched" style={{ outline: '2px solid rgba(255,255,255,0.1)' }}>✓</button>
                     <button className="ghost-btn" title="Download" style={{ outline: '2px solid rgba(255,255,255,0.1)' }}>⬇</button>

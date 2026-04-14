@@ -14,6 +14,7 @@ interface AnimindDesktopApi {
   };
   auth: {
     session: () => Promise<{ userId: string; email?: string } | null>;
+    token: () => Promise<string | null>;
     signIn: (email: string, password: string) => Promise<{ userId: string; email?: string; accessToken: string }>;
     signInWithGoogle: () => Promise<{ userId: string; email?: string; accessToken: string }>;
     signOut: () => Promise<{ ok: boolean }>;
@@ -32,6 +33,7 @@ interface AnimindDesktopApi {
     stop: () => Promise<{ ok: boolean }>;
     seek: (seconds: number) => Promise<{ ok: boolean }>;
     getState: () => Promise<{ paused: boolean; timePos: number; duration: number }>;
+    isRunning: () => Promise<{ running: boolean }>;
     getTrackList: () => Promise<Array<{ id: number; type: string; title?: string; lang?: string; codec?: string; selected?: boolean }>>;
     setAudioTrack: (trackId: number) => Promise<{ ok: boolean }>;
     setSubtitleTrack: (trackId: number | 'no') => Promise<{ ok: boolean }>;

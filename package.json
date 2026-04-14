@@ -17,7 +17,8 @@
     "@supabase/supabase-js": "^2.52.0",
     "axios": "^1.11.0",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
@@ -38,7 +39,9 @@
     },
     "protocols": {
       "name": "Animind Deep Link",
-      "schemes": ["animind"]
+      "schemes": [
+        "animind"
+      ]
     },
     "files": [
       "dist/**/*",
