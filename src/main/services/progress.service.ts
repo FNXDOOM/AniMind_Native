@@ -50,9 +50,15 @@ export class ProgressService {
     return store[keyOf(user.id, animeId, episodeIndex)]?.timestamp ?? 0;
   }
 
-  async saveProgress(animeId: string, episodeIndex: number, timestamp: number): Promise<void> {
+  async saveProgress(
+    animeId: string,
+    episodeIndex: number,
+    timestamp: number,
+  ): Promise<{ saved: boolean; reason?: 'not-authenticated' | 'local-only' }> {
     const user = await authService.getCurrentUser();
-    if (!user) return;
+    if (!user) {
+      return { saved: false, reason: 'not-authenticated' };
+    }
 
     const store = await this.load();
     const entry: ProgressEntry = {
@@ -82,7 +88,10 @@ export class ProgressService {
         );
     } catch {
       // Keep local progress even if remote sync fails.
+      return { saved: true, reason: 'local-only' };
     }
+
+    return { saved: true };
   }
 }
 

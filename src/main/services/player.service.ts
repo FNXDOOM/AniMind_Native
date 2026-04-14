@@ -18,6 +18,11 @@ export interface PlayerState {
   duration: number;
 }
 
+export interface PlayerAudioState {
+  volume: number;
+  muted: boolean;
+}
+
 export interface MpvAvailability {
   available: boolean;
   path: string;
@@ -228,6 +233,15 @@ export class PlayerService {
     await this.command(['set_property', 'sid', trackId]);
   }
 
+  async setVolume(volume: number): Promise<void> {
+    const normalized = Math.max(0, Math.min(100, Number.isFinite(volume) ? volume : 100));
+    await this.command(['set_property', 'volume', normalized]);
+  }
+
+  async setMuted(muted: boolean): Promise<void> {
+    await this.command(['set_property', 'mute', Boolean(muted)]);
+  }
+
   async addSubtitleFile(filePath: string): Promise<void> {
     await this.command(['sub-add', filePath, 'select']);
   }
@@ -248,6 +262,18 @@ export class PlayerService {
       paused: Boolean(pauseResp.data),
       timePos: Number(posResp.data ?? 0),
       duration: Number(durResp.data ?? 0),
+    };
+  }
+
+  async getAudioState(): Promise<PlayerAudioState> {
+    const [volumeResp, muteResp] = await Promise.all([
+      this.command(['get_property', 'volume']).catch(() => ({ data: 100 })),
+      this.command(['get_property', 'mute']).catch(() => ({ data: false })),
+    ]);
+
+    return {
+      volume: Math.max(0, Math.min(100, Number(volumeResp.data ?? 100))),
+      muted: Boolean(muteResp.data),
     };
   }
 

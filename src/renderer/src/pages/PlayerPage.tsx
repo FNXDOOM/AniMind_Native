@@ -12,7 +12,7 @@ type Props = {
   animeId: string;
   animeTitle: string;
   episode: Episode;
-  streamInfo: { clientType?: 'native' | 'browser'; message?: string } | null;
+  streamInfo: { clientType?: 'native' | 'browser'; hlsRequired?: boolean; message?: string } | null;
   streamUrl: string;
   audioTracks: AudioTrack[];
   selectedAudioTrackIndex: number | null;
@@ -48,6 +48,20 @@ function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
+}
+
+function isBenignPlayInterruption(error: unknown): boolean {
+  if (!error) return false;
+
+  const name = typeof error === 'object' && error !== null && 'name' in error
+    ? String((error as { name?: unknown }).name ?? '')
+    : '';
+  const message = getErrorMessage(error, '').toLowerCase();
+
+  if (name === 'AbortError') return true;
+  return message.includes('interrupted by a call to pause()')
+    || message.includes('play() request was interrupted')
+    || message.includes('aborted by pause');
 }
 
 function PlayIcon({ className }: IconProps) {
@@ -178,6 +192,7 @@ export function PlayerPage(props: Props) {
   const [speed, setSpeed] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [bufferedUntil, setBufferedUntil] = useState(0);
+  const lastStableTimeRef = useRef(0);
 
   const [playbackTarget, setPlaybackTarget] = useState<'html5' | 'mpv'>('html5');
   const [mpvRunning, setMpvRunning] = useState(false);
@@ -189,9 +204,26 @@ export function PlayerPage(props: Props) {
   const speedSeekTimerRef = useRef<number | null>(null);
   const stallDebounceRef = useRef<number | null>(null);
   const stallSentRef = useRef(false);
+  const volumeRef = useRef(85);
+  const mutedRef = useRef(false);
+  const adjustingVolumeRef = useRef(false);
 
   // Keep ref in sync with state so callbacks always read latest value
   useEffect(() => { playbackTargetRef.current = playbackTarget; }, [playbackTarget]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => { mutedRef.current = isMuted; }, [isMuted]);
+
+  useEffect(() => {
+    const stopAdjusting = () => {
+      adjustingVolumeRef.current = false;
+    };
+    window.addEventListener('mouseup', stopAdjusting);
+    window.addEventListener('touchend', stopAdjusting);
+    return () => {
+      window.removeEventListener('mouseup', stopAdjusting);
+      window.removeEventListener('touchend', stopAdjusting);
+    };
+  }, []);
 
   const clearSpeedSeekTimer = useCallback(() => {
     if (speedSeekTimerRef.current !== null) {
@@ -226,10 +258,17 @@ export function PlayerPage(props: Props) {
         const { running } = await desktopApi.isPlayerRunning();
         setMpvRunning(running);
         if (running && playbackTargetRef.current === 'mpv') {
-          const state = await desktopApi.getPlayerState();
+          const [state, audioState] = await Promise.all([
+            desktopApi.getPlayerState(),
+            desktopApi.getPlayerAudioState().catch(() => ({ volume: volumeRef.current, muted: mutedRef.current })),
+          ]);
           setPaused(Boolean(state.paused));
           setTimePos(sanitizeMediaTime(Number(state.timePos ?? 0)));
           setDuration(sanitizeMediaTime(Number(state.duration ?? 0)));
+          if (!adjustingVolumeRef.current) {
+            setVolume(Math.max(0, Math.min(100, Number(audioState.volume ?? 100))));
+            setIsMuted(Boolean(audioState.muted));
+          }
           setBufferedUntil(0);
         } else if (playbackTargetRef.current === 'html5') {
           const video = videoRef.current;
@@ -317,7 +356,13 @@ export function PlayerPage(props: Props) {
         const delay = Math.max(0, scheduledPlayAt - Date.now());
         window.setTimeout(() => {
           suppressSyncEmitFor();
-          void video.play().catch(() => undefined);
+          void video.play().catch((err: unknown) => {
+            if (isBenignPlayInterruption(err)) {
+              return;
+            }
+            setPaused(true);
+            setPlayerError(getErrorMessage(err, 'Remote play failed to start in embedded player.'));
+          });
         }, delay);
       },
       onRemotePause: (time) => {
@@ -399,7 +444,7 @@ export function PlayerPage(props: Props) {
     } finally {
       setSyncBusy(false);
     }
-  }, [syncplay]);
+  }, [syncplay.createRoom]);
 
   const handleJoinRoom = useCallback(async (code: string) => {
     setSyncBusy(true);
@@ -411,7 +456,7 @@ export function PlayerPage(props: Props) {
     } finally {
       setSyncBusy(false);
     }
-  }, [syncplay]);
+  }, [syncplay.joinRoom]);
 
   useEffect(() => {
     if (pendingSync || syncplay.isInRoom || Boolean(syncplay.error)) {
@@ -485,7 +530,15 @@ export function PlayerPage(props: Props) {
     return () => {
       window.clearInterval(reportTimer);
     };
-  }, [getBufferedAhead, mpvRunning, syncplay]);
+  }, [
+    getBufferedAhead,
+    mpvRunning,
+    syncplay.isInRoom,
+    syncplay.inBufferGate,
+    syncplay.bufferGoalSeconds,
+    syncplay.reportBufferingProgress,
+    syncplay.reportReady,
+  ]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -567,7 +620,9 @@ export function PlayerPage(props: Props) {
     };
 
     const onTimeUpdate = () => {
-      setTimePos(sanitizeMediaTime(video.currentTime));
+      const current = sanitizeMediaTime(video.currentTime);
+      lastStableTimeRef.current = current;
+      setTimePos(current);
       setDuration(sanitizeMediaTime(video.duration));
       updateBuffered();
     };
@@ -587,7 +642,20 @@ export function PlayerPage(props: Props) {
     };
     const onEnded = () => {
       setPaused(true);
-      const finalTime = sanitizeMediaTime(video.duration || video.currentTime || 0);
+      const endedAt = sanitizeMediaTime(video.currentTime || 0);
+      const lastStable = sanitizeMediaTime(lastStableTimeRef.current || 0);
+
+      // Some streams report a larger catalog duration and jump to it on end.
+      // If ended time leaps far beyond last observed playback position, trust the stable position.
+      let finalTime = endedAt;
+      if (lastStable > 0 && endedAt - lastStable > 15) {
+        finalTime = lastStable;
+      }
+
+      if (finalTime > 0) {
+        setTimePos(finalTime);
+        setDuration(finalTime);
+      }
       void onSaveProgress(finalTime);
     };
     const onWaiting = () => {
@@ -646,6 +714,7 @@ export function PlayerPage(props: Props) {
     setTimePos(0);
     setDuration(0);
     setBufferedUntil(0);
+    lastStableTimeRef.current = 0;
 
     return () => {
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
@@ -662,7 +731,15 @@ export function PlayerPage(props: Props) {
       video.removeEventListener('progress', updateBuffered);
       clearStallDebounce();
     };
-  }, [clearStallDebounce, onSaveProgress, resumeFromSeconds, streamUrl, syncplay]);
+  }, [
+    clearStallDebounce,
+    onSaveProgress,
+    resumeFromSeconds,
+    streamUrl,
+    syncplay.isInRoom,
+    syncplay.emitBuffering,
+    syncplay.emitStallRecovered,
+  ]);
 
   const timePosRef = useRef(0);
   useEffect(() => { timePosRef.current = timePos; }, [timePos]);
@@ -712,17 +789,60 @@ export function PlayerPage(props: Props) {
     return active ? active.label : 'Off';
   }, [selectedSubtitleId, subtitles]);
 
+  const effectiveDuration = duration > 0 ? duration : 0;
+
+  const streamWarning = useMemo(() => {
+    if (streamInfo?.clientType !== 'native') return '';
+    return streamInfo.message?.trim() || 'This stream looks native-only. Embedded playback may miss audio or duration metadata.';
+  }, [streamInfo]);
+
   const playedPercent = useMemo(() => {
-    if (!duration || duration <= 0) return 0;
-    return Math.max(0, Math.min(100, (timePos / duration) * 100));
-  }, [timePos, duration]);
+    if (!effectiveDuration || effectiveDuration <= 0) return 0;
+    return Math.max(0, Math.min(100, (timePos / effectiveDuration) * 100));
+  }, [timePos, effectiveDuration]);
 
   const bufferedPercent = useMemo(() => {
-    if (!duration || duration <= 0) return 0;
-    return Math.max(0, Math.min(100, (bufferedUntil / duration) * 100));
-  }, [bufferedUntil, duration]);
+    if (!effectiveDuration || effectiveDuration <= 0) return 0;
+    return Math.max(0, Math.min(100, (bufferedUntil / effectiveDuration) * 100));
+  }, [bufferedUntil, effectiveDuration]);
 
-  const seekMax = useMemo(() => Math.max(1, Math.ceil(duration || 0)), [duration]);
+  const seekMax = useMemo(() => Math.max(1, Math.ceil(effectiveDuration || 0)), [effectiveDuration]);
+
+  const applyVolumeChange = useCallback((next: number) => {
+    const normalized = Math.max(0, Math.min(100, Number(next)));
+    setVolume(normalized);
+
+    if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+      void desktopApi.setPlayerVolume(normalized)
+        .then(() => {
+          if (normalized > 0 && isMuted) {
+            setIsMuted(false);
+            return desktopApi.setPlayerMuted(false);
+          }
+          return undefined;
+        })
+        .catch(() => {
+          setPlayerError('Unable to change MPV volume.');
+        });
+      return;
+    }
+
+    if (normalized > 0) {
+      setIsMuted(false);
+    }
+  }, [isMuted, mpvRunning]);
+
+  const toggleMuted = useCallback(() => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+
+    if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+      void desktopApi.setPlayerMuted(nextMuted).catch(() => {
+        setIsMuted(prev => !prev);
+        setPlayerError('Unable to change MPV mute state.');
+      });
+    }
+  }, [isMuted, mpvRunning]);
 
   const togglePlayback = useCallback(() => {
     if (playbackTargetRef.current === 'mpv' && mpvRunning) {
@@ -755,6 +875,9 @@ export function PlayerPage(props: Props) {
     if (video.paused) {
       setPaused(false);
       void video.play().catch((err: unknown) => {
+        if (isBenignPlayInterruption(err)) {
+          return;
+        }
         setPaused(true);
         setPlayerError(getErrorMessage(err, 'Failed to start playback'));
       });
@@ -773,7 +896,7 @@ export function PlayerPage(props: Props) {
       syncplay.emitPause(video.currentTime || 0);
     }
     video.pause();
-  }, [mpvRunning, syncplay]);
+  }, [mpvRunning, syncplay.isInRoom, syncplay.emitPlay, syncplay.emitPause]);
 
   const seekBy = useCallback((delta: number) => {
     if (playbackTargetRef.current === 'mpv' && mpvRunning) {
@@ -800,7 +923,7 @@ export function PlayerPage(props: Props) {
     if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
       syncplay.emitSeek(next);
     }
-  }, [mpvRunning, syncplay]);
+  }, [mpvRunning, syncplay.isInRoom, syncplay.emitSeek]);
 
   const toggleFullscreen = useCallback(async () => {
     const shell = shellRef.current;
@@ -839,7 +962,7 @@ export function PlayerPage(props: Props) {
         void toggleFullscreen();
       } else if (event.key.toLowerCase() === 'm') {
         event.preventDefault();
-        setIsMuted(prev => !prev);
+        toggleMuted();
       } else if (event.key === 'Escape') {
         setSettingsMenuOpen(false);
       }
@@ -847,7 +970,7 @@ export function PlayerPage(props: Props) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [seekBy, signalInteraction, toggleFullscreen, togglePlayback]);
+  }, [seekBy, signalInteraction, toggleFullscreen, toggleMuted, togglePlayback]);
 
   const handleOpenExternalPlayer = useCallback(async () => {
     try {
@@ -868,7 +991,7 @@ export function PlayerPage(props: Props) {
     && playbackTargetRef.current === 'html5'
     && Boolean(streamUrl);
 
-  const durationLabel = duration > 0 ? formatTime(duration) : '--:--';
+  const durationLabel = effectiveDuration > 0 ? formatTime(effectiveDuration) : '--:--';
 
   return (
     <div
@@ -889,6 +1012,13 @@ export function PlayerPage(props: Props) {
           <span className="error">{error || playerError}</span>
         </div>
       )}
+      {streamWarning ? (
+        <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 11, maxWidth: 460 }}>
+          <div style={{ background: 'rgba(0,0,0,0.78)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '10px 12px', color: '#ffd56a', fontSize: 12, lineHeight: 1.35 }}>
+            {streamWarning}
+          </div>
+        </div>
+      ) : null}
 
       <video
         ref={videoRef}
@@ -991,22 +1121,33 @@ export function PlayerPage(props: Props) {
               <button className="ghost-btn" onClick={() => seekBy(10)} title="Forward 10s" style={{ width: 36, height: 36 }}>
                 <ForwardIcon className="control-icon" />
               </button>
-              <label className="row gap-sm align-center volume-wrap" style={{ marginLeft: 8 }}>
-                <button className="ghost-btn" onClick={() => setIsMuted(prev => !prev)} title="Mute" style={{ width: 36, height: 36 }}>
+              <div className="row gap-sm align-center volume-wrap" style={{ marginLeft: 8 }}>
+                <button
+                  className="ghost-btn"
+                  onClick={toggleMuted}
+                  title="Mute"
+                  style={{ width: 36, height: 36 }}
+                >
                   {isMuted || volume === 0 ? <MuteIcon className="control-icon" /> : <VolumeIcon className="control-icon" />}
                 </button>
                 <input
                   className="volume-slider"
                   type="range" min={0} max={100} value={volume}
                   style={{ width: 80, accentColor: 'var(--accent)' }}
+                  onMouseDown={() => { adjustingVolumeRef.current = true; }}
+                  onTouchStart={() => { adjustingVolumeRef.current = true; }}
+                  onMouseUp={() => { adjustingVolumeRef.current = false; }}
+                  onTouchEnd={() => { adjustingVolumeRef.current = false; }}
+                  onInput={e => {
+                    applyVolumeChange(Number((e.target as HTMLInputElement).value));
+                    signalInteraction();
+                  }}
                   onChange={e => {
-                    const next = Number(e.target.value);
-                    setVolume(next);
-                    if (next > 0) setIsMuted(false);
+                    applyVolumeChange(Number(e.target.value));
                     signalInteraction();
                   }}
                 />
-              </label>
+              </div>
               <span className="time-readout">{formatTime(timePos)} / {durationLabel}</span>
             </div>
 

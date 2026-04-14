@@ -17,8 +17,8 @@ const api = {
   library: {
     getShows: () => ipcRenderer.invoke('library:shows'),
     getShowDetails: (showId: string) => ipcRenderer.invoke('library:showDetails', showId),
-    getStreamTicket: (episodeId: string, audioTrackIndex?: number) =>
-      ipcRenderer.invoke('library:streamTicket', { episodeId, audioTrackIndex }),
+    getStreamTicket: (episodeId: string, audioTrackIndex?: number, clientType?: 'browser' | 'native') =>
+      ipcRenderer.invoke('library:streamTicket', { episodeId, audioTrackIndex, clientType }),
     getAudioTracks: (episodeId: string) => ipcRenderer.invoke('library:audioTracks', episodeId),
     getSubtitles: (episodeId: string) => ipcRenderer.invoke('library:subtitles', episodeId),
   },
@@ -29,10 +29,13 @@ const api = {
     stop: () => ipcRenderer.invoke('player:stop'),
     seek: (seconds: number) => ipcRenderer.invoke('player:seek', seconds),
     getState: () => ipcRenderer.invoke('player:state'),
+    getAudioState: () => ipcRenderer.invoke('player:audioState'),
     isRunning: () => ipcRenderer.invoke('player:isRunning'),
     getTrackList: () => ipcRenderer.invoke('player:trackList'),
     setAudioTrack: (trackId: number) => ipcRenderer.invoke('player:setAudioTrack', trackId),
     setSubtitleTrack: (trackId: number | 'no') => ipcRenderer.invoke('player:setSubtitleTrack', trackId),
+    setVolume: (volume: number) => ipcRenderer.invoke('player:setVolume', volume),
+    setMuted: (muted: boolean) => ipcRenderer.invoke('player:setMuted', muted),
     addSubtitleContent: (episodeId: string, track: { id: string; label: string; language: string; content: string }) =>
       ipcRenderer.invoke('player:addSubtitleContent', { episodeId, track }),
   },

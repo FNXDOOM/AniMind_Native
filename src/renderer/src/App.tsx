@@ -64,6 +64,7 @@ export default function App() {
   const [selectedAudioTrackIndex, setSelectedAudioTrackIndex] = useState<number | null>(null);
   const [resumeFromSeconds, setResumeFromSeconds] = useState(0);
   const [playerError, setPlayerError] = useState('');
+  const [progressWarning, setProgressWarning] = useState('');
   const [opening, setOpening] = useState(false);
   const [cloudSubtitles, setCloudSubtitles] = useState<SubtitleTrack[]>([]);
 
@@ -130,24 +131,21 @@ export default function App() {
     setAudioTracks([]);
     setSelectedAudioTrackIndex(null);
     setResumeFromSeconds(0);
+    setProgressWarning('');
     setView('library');
   }, []);
 
   const startEpisode = useCallback(async (animeId: string, animeTitle: string, episode: Episode, sync?: PendingSync) => {
     setPlayerError('');
+    setProgressWarning('');
     setOpening(true);
     // Capture episodes snapshot NOW before any async gap (fixes stale selectedShow closure)
     const episodesSnapshot = selectedShow?.anime.id === animeId ? selectedShow.episodes : null;
     try {
-      setCurrentAnimeId(animeId);
-      setCurrentAnimeTitle(animeTitle);
-      setCurrentEpisode(episode);
       if (sync !== undefined) setPendingSync(sync);
 
-      const ticket = await desktopApi.getStreamTicket(episode.id);
-      setStreamInfo(ticket);
-      setStreamUrl(ticket.url);
-      setSelectedAudioTrackIndex(null);
+      let ticket = await desktopApi.getStreamTicket(episode.id, undefined, 'browser');
+      let selectedTrackIndex: number | null = null;
 
       const [subtitles, tracks] = await Promise.all([
         desktopApi.getSubtitles(episode.id),
@@ -156,6 +154,25 @@ export default function App() {
       setCloudSubtitles(subtitles);
       setAudioTracks(tracks ?? []);
 
+      // If backend still hands back a native-oriented ticket, retry with a browser-supported track.
+      if (ticket.clientType === 'native') {
+        const browserTrack = (tracks ?? []).find(
+          track => track.browserSupported && typeof track.streamIndex === 'number' && track.streamIndex >= 0,
+        );
+        if (browserTrack) {
+          try {
+            ticket = await desktopApi.getStreamTicket(episode.id, browserTrack.streamIndex, 'browser');
+            selectedTrackIndex = browserTrack.streamIndex;
+          } catch {
+            // Keep original ticket if retry fails.
+          }
+        }
+      }
+
+      setStreamInfo(ticket);
+      setStreamUrl(ticket.url);
+      setSelectedAudioTrackIndex(selectedTrackIndex);
+
       const selectedIdx = episodesSnapshot?.findIndex(e => e.id === episode.id) ?? -1;
       if (selectedIdx >= 0) {
         const saved = await desktopApi.getProgress(animeId, selectedIdx);
@@ -163,6 +180,10 @@ export default function App() {
       } else {
         setResumeFromSeconds(0);
       }
+
+      setCurrentAnimeId(animeId);
+      setCurrentAnimeTitle(animeTitle);
+      setCurrentEpisode(episode);
       setView('player');
     } catch (err: any) {
       setPlayerError(err?.message ?? 'Failed to start playback');
@@ -179,8 +200,8 @@ export default function App() {
     const savedTime = Math.max(0, currentTime || 0);
     try {
       const ticket = streamIndex === null
-        ? await desktopApi.getStreamTicket(currentEpisode.id)
-        : await desktopApi.getStreamTicket(currentEpisode.id, streamIndex);
+        ? await desktopApi.getStreamTicket(currentEpisode.id, undefined, 'browser')
+        : await desktopApi.getStreamTicket(currentEpisode.id, streamIndex, 'browser');
       setSelectedAudioTrackIndex(streamIndex);
       setStreamInfo(ticket);
       setResumeFromSeconds(savedTime);
@@ -194,7 +215,16 @@ export default function App() {
 
   const saveProgress = useCallback(async (seconds: number) => {
     if (!currentAnimeId || episodeIndex === null) return;
-    await desktopApi.saveProgress(currentAnimeId, episodeIndex, seconds);
+    try {
+      const result = await desktopApi.saveProgress(currentAnimeId, episodeIndex, seconds) as { saved?: boolean; reason?: string };
+      if (result?.saved === false) {
+        setProgressWarning('Session expired. Progress is not being saved. Please sign in again.');
+      } else {
+        setProgressWarning('');
+      }
+    } catch {
+      setProgressWarning('Unable to save playback progress right now.');
+    }
   }, [currentAnimeId, episodeIndex]);
 
   const openInExternalPlayer = useCallback(async () => {
@@ -262,7 +292,7 @@ export default function App() {
           resumeFromSeconds={resumeFromSeconds}
           loading={opening}
           subtitles={cloudSubtitles}
-          error={playerError}
+          error={playerError || progressWarning}
           pendingSync={pendingSync}
           onSyncConsumed={() => setPendingSync(null)}
           onSelectAudioTrack={(trackIndex, timePos) => switchAudioTrack(trackIndex, timePos)}

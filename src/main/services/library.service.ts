@@ -38,6 +38,8 @@ export interface StreamTicket {
   message?: string;
 }
 
+export type StreamClientType = 'browser' | 'native';
+
 export interface SubtitleTrack {
   id: string;
   label: string;
@@ -99,7 +101,7 @@ export class LibraryService {
         id: ep.id,
         number: Math.round(ep.episode_number ?? index + 1),
         title: ep.title?.trim() || `Episode ${Math.round(ep.episode_number ?? index + 1)}`,
-        duration: ep.duration ? String(ep.duration) : '24:00',
+        duration: ep.duration ? String(ep.duration) : '',
         thumbnail: anime.imageUrl,
       }))
       .sort((a: CloudEpisode, b: CloudEpisode) => a.number - b.number);
@@ -107,10 +109,14 @@ export class LibraryService {
     return { anime, episodes };
   }
 
-  async getEpisodeStreamTicket(episodeId: string, audioTrackIndex?: number): Promise<StreamTicket> {
+  async getEpisodeStreamTicket(
+    episodeId: string,
+    audioTrackIndex?: number,
+    clientType: StreamClientType = 'browser',
+  ): Promise<StreamTicket> {
     const client = await this.getClient();
     const headers = await this.authHeaders();
-    const params: Record<string, string | number> = { clientType: 'desktop' };
+    const params: Record<string, string | number> = { clientType };
     if (typeof audioTrackIndex === 'number') params.at = audioTrackIndex;
 
     const response = await client.get(`/api/episodes/${encodeURIComponent(episodeId)}/stream-ticket`, {

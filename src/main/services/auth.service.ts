@@ -21,6 +21,7 @@ function getSessionPath(): string {
 export class AuthService {
   private supabase: SupabaseClient | null = null;
   private session: Session | null = null;
+  private refreshPromise: Promise<Session | null> | null = null;
   private pendingGoogleSignIn:
     | {
         promise: Promise<{ user: User; accessToken: string }>;
@@ -225,6 +226,31 @@ export class AuthService {
     await unlink(getSessionPath()).catch(() => undefined);
   }
 
+  private async refreshSessionLocked(supabase: SupabaseClient): Promise<Session | null> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = (async () => {
+      if (!this.session) return null;
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: this.session.refresh_token,
+      });
+      if (error || !data.session) {
+        return null;
+      }
+      this.session = data.session;
+      await this.persistSession(data.session);
+      return data.session;
+    })();
+
+    try {
+      return await this.refreshPromise;
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+
   async getAccessToken(): Promise<string | null> {
     const supabase = await this.getSupabase();
     if (!this.session) {
@@ -236,12 +262,8 @@ export class AuthService {
     const expiresAt = this.session.expires_at ?? 0;
     const isExpiring = Date.now() / 1000 >= expiresAt - 60;
     if (isExpiring) {
-      const { data, error } = await supabase.auth.refreshSession({
-        refresh_token: this.session.refresh_token,
-      });
-      if (error || !data.session) return null;
-      this.session = data.session;
-      await this.persistSession(data.session);
+      const refreshed = await this.refreshSessionLocked(supabase);
+      if (!refreshed) return null;
     }
 
     return this.session?.access_token ?? null;

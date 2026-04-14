@@ -188,7 +188,7 @@ export function LibraryPage({
                        <div className="plex-card-badge">E{ep.number}</div>
                     </div>
                     <div className="plex-card-title">{ep.title || `Episode ${ep.number}`}</div>
-                    <div className="plex-card-subtitle">{ep.duration || '24m'}</div>
+                    <div className="plex-card-subtitle">{ep.duration || '--:--'}</div>
                   </div>
                 ))}
               </div>

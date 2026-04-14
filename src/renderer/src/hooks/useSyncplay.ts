@@ -67,12 +67,22 @@ function normalizeBaseUrl(raw: string): string {
 export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Promise<Snapshot>, callbacks: SyncplayCallbacks) {
   const [state, setState] = useState<SyncplayState>(INITIAL_STATE);
   const socketRef = useRef<Socket | null>(null);
+  const getSnapshotRef = useRef(getSnapshot);
+  const callbacksRef = useRef(callbacks);
   const roomCodeRef = useRef('');
   const bufferGoalRef = useRef(120);
   const heartbeatRef = useRef<number | null>(null);
   const ntpRef = useRef<number | null>(null);
   const ntpCountRef = useRef(0);
   const clockOffsetRef = useRef(0);
+
+  useEffect(() => {
+    getSnapshotRef.current = getSnapshot;
+  }, [getSnapshot]);
+
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  }, [callbacks]);
 
   const stopHeartbeat = useCallback(() => {
     if (heartbeatRef.current !== null) {
@@ -88,7 +98,7 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
       if (!socket?.connected) return;
       if (!roomCodeRef.current) return;
 
-      void Promise.resolve(getSnapshot())
+      void Promise.resolve(getSnapshotRef.current())
         .then((snap) => {
           socket.emit('heartbeat', {
             currentTime: snap.currentTime,
@@ -100,7 +110,7 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
           // Ignore transient heartbeat snapshot errors (e.g., MPV not ready).
         });
     }, HEARTBEAT_INTERVAL_MS);
-  }, [getSnapshot, stopHeartbeat]);
+  }, [stopHeartbeat]);
 
   const stopNtp = useCallback(() => {
     if (ntpRef.current !== null) {
@@ -232,31 +242,31 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
         ? data.scheduledPlayAt
         : (typeof data.sentAt === 'number' ? data.sentAt + 180 : Date.now() + 180);
       const localAt = Math.max(0, playAtServer - clockOffsetRef.current);
-      callbacks.onRemotePlay(t, localAt);
+      callbacksRef.current.onRemotePlay(t, localAt);
       setState(prev => ({ ...prev, inBufferGate: false }));
     });
 
     socket.on('pause', (data: { currentTime?: number }) => {
-      callbacks.onRemotePause(typeof data.currentTime === 'number' ? data.currentTime : 0);
+      callbacksRef.current.onRemotePause(typeof data.currentTime === 'number' ? data.currentTime : 0);
     });
 
     socket.on('syncPaused', (data: { currentTime?: number }) => {
-      callbacks.onRemotePause(typeof data.currentTime === 'number' ? data.currentTime : 0);
+      callbacksRef.current.onRemotePause(typeof data.currentTime === 'number' ? data.currentTime : 0);
     });
 
     socket.on('seek', (data: { time?: number }) => {
-      callbacks.onRemoteSeek(typeof data.time === 'number' ? data.time : 0);
+      callbacksRef.current.onRemoteSeek(typeof data.time === 'number' ? data.time : 0);
     });
 
     socket.on('softCorrect', (data: { currentTime?: number }) => {
-      callbacks.onSoftCorrect(typeof data.currentTime === 'number' ? data.currentTime : 0);
+      callbacksRef.current.onSoftCorrect(typeof data.currentTime === 'number' ? data.currentTime : 0);
     });
 
     socket.on('speedSeek', (data: { rate?: number; duration?: number; targetTime?: number }) => {
       const rate = typeof data.rate === 'number' ? data.rate : 1;
       const duration = typeof data.duration === 'number' ? data.duration : 3000;
       const targetTime = typeof data.targetTime === 'number' ? data.targetTime : 0;
-      callbacks.onSpeedSeek(rate, duration, targetTime);
+      callbacksRef.current.onSpeedSeek(rate, duration, targetTime);
     });
 
     socket.on('waitForBufferGoal', (data: { currentTime?: number; bufferGoalSeconds?: number; totalPeers?: number; readyCount?: number }) => {
@@ -271,7 +281,7 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
         totalPeers: typeof data.totalPeers === 'number' ? data.totalPeers : prev.totalPeers,
       }));
       bufferGoalRef.current = goal;
-      callbacks.onWaitForBufferGoal(currentTime, goal);
+      callbacksRef.current.onWaitForBufferGoal(currentTime, goal);
     });
 
     socket.on('waitForReady', (data: { currentTime?: number; totalPeers?: number; readyCount?: number }) => {
@@ -283,13 +293,13 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
         readyCount: typeof data.readyCount === 'number' ? data.readyCount : prev.readyCount,
         totalPeers: typeof data.totalPeers === 'number' ? data.totalPeers : prev.totalPeers,
       }));
-      callbacks.onWaitForBufferGoal(currentTime, bufferGoalRef.current);
+      callbacksRef.current.onWaitForBufferGoal(currentTime, bufferGoalRef.current);
     });
 
     socket.on('allReady', (data: { currentTime?: number; scheduledPlayAt?: number }) => {
       const t = typeof data.currentTime === 'number' ? data.currentTime : 0;
       const playAtServer = typeof data.scheduledPlayAt === 'number' ? data.scheduledPlayAt : Date.now() + 200;
-      callbacks.onRemotePlay(t, Math.max(0, playAtServer - clockOffsetRef.current));
+      callbacksRef.current.onRemotePlay(t, Math.max(0, playAtServer - clockOffsetRef.current));
       setState(prev => ({ ...prev, inBufferGate: false, status: 'All peers ready' }));
     });
 
@@ -310,33 +320,33 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
     socket.on('peerJoined', (data: { displayName?: string }) => {
       const message = `${data.displayName ?? 'A peer'} joined the room`;
       setState(prev => ({ ...prev, status: message }));
-      callbacks.onStatusEvent(message);
+      callbacksRef.current.onStatusEvent(message);
     });
 
     socket.on('peerLeft', (data: { displayName?: string }) => {
       const message = `${data.displayName ?? 'A peer'} left the room`;
       setState(prev => ({ ...prev, status: message }));
-      callbacks.onStatusEvent(message);
+      callbacksRef.current.onStatusEvent(message);
     });
 
     socket.on('peerStalling', (data: { displayName?: string }) => {
       const message = `${data.displayName ?? 'A peer'} is buffering`;
       setState(prev => ({ ...prev, status: message }));
-      callbacks.onStatusEvent(message);
+      callbacksRef.current.onStatusEvent(message);
     });
 
     socket.on('peerStallRecovered', (data: { displayName?: string }) => {
       const message = `${data.displayName ?? 'A peer'} recovered`;
       setState(prev => ({ ...prev, status: message }));
-      callbacks.onStatusEvent(message);
+      callbacksRef.current.onStatusEvent(message);
     });
 
     socket.on('sync', (data: { currentTime?: number; isPlaying?: boolean }) => {
       const t = typeof data.currentTime === 'number' ? data.currentTime : 0;
       if (data.isPlaying) {
-        callbacks.onRemotePlay(t, Date.now() + 180);
+        callbacksRef.current.onRemotePlay(t, Date.now() + 180);
       } else {
-        callbacks.onRemotePause(t);
+        callbacksRef.current.onRemotePause(t);
       }
     });
 
@@ -351,7 +361,7 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
     });
 
     return socket;
-  }, [callbacks, startHeartbeat, startNtp, stopHeartbeat]);
+  }, [startHeartbeat, startNtp, stopHeartbeat]);
 
   const emitWithAckOrDisconnect = useCallback(<TResponse,>(
     socket: Socket,
@@ -423,14 +433,14 @@ export function useSyncplay(episodeId: string, getSnapshot: () => Snapshot | Pro
     roomCodeRef.current = roomCode.trim().toUpperCase();
 
     if (typeof response.currentTime === 'number') {
-      callbacks.onRemoteSeek(response.currentTime);
+      callbacksRef.current.onRemoteSeek(response.currentTime);
     }
     if (response.isPlaying && typeof response.currentTime === 'number') {
-      callbacks.onRemotePlay(response.currentTime, Date.now() + 150);
+      callbacksRef.current.onRemotePlay(response.currentTime, Date.now() + 150);
     }
 
     startHeartbeat();
-  }, [callbacks, emitWithAckOrDisconnect, ensureConnected, startHeartbeat]);
+  }, [emitWithAckOrDisconnect, ensureConnected, startHeartbeat]);
 
   const leaveRoom = useCallback(() => {
     disconnect();

@@ -22,7 +22,7 @@ interface AnimindDesktopApi {
   library: {
     getShows: () => Promise<any[]>;
     getShowDetails: (showId: string) => Promise<any>;
-    getStreamTicket: (episodeId: string, audioTrackIndex?: number) => Promise<any>;
+    getStreamTicket: (episodeId: string, audioTrackIndex?: number, clientType?: 'browser' | 'native') => Promise<any>;
     getAudioTracks: (episodeId: string) => Promise<any[]>;
     getSubtitles: (episodeId: string) => Promise<any[]>;
   };
@@ -33,15 +33,18 @@ interface AnimindDesktopApi {
     stop: () => Promise<{ ok: boolean }>;
     seek: (seconds: number) => Promise<{ ok: boolean }>;
     getState: () => Promise<{ paused: boolean; timePos: number; duration: number }>;
+    getAudioState: () => Promise<{ volume: number; muted: boolean }>;
     isRunning: () => Promise<{ running: boolean }>;
     getTrackList: () => Promise<Array<{ id: number; type: string; title?: string; lang?: string; codec?: string; selected?: boolean }>>;
     setAudioTrack: (trackId: number) => Promise<{ ok: boolean }>;
     setSubtitleTrack: (trackId: number | 'no') => Promise<{ ok: boolean }>;
+    setVolume: (volume: number) => Promise<{ ok: boolean }>;
+    setMuted: (muted: boolean) => Promise<{ ok: boolean }>;
     addSubtitleContent: (episodeId: string, track: { id: string; label: string; language: string; content: string }) => Promise<{ ok: boolean; filePath: string }>;
   };
   progress: {
     get: (animeId: string, episodeIndex: number) => Promise<number>;
-    save: (animeId: string, episodeIndex: number, timestamp: number) => Promise<{ ok: boolean }>;
+    save: (animeId: string, episodeIndex: number, timestamp: number) => Promise<{ saved: boolean; reason?: 'not-authenticated' | 'local-only' }>;
   };
 }
 

@@ -14,8 +14,8 @@ export const desktopApi = {
 
   getShows: () => window.animindDesktop.library.getShows() as Promise<Show[]>,
   getShowDetails: (showId: string) => window.animindDesktop.library.getShowDetails(showId) as Promise<ShowDetails>,
-  getStreamTicket: (episodeId: string, audioTrackIndex?: number) =>
-    window.animindDesktop.library.getStreamTicket(episodeId, audioTrackIndex) as Promise<StreamTicket>,
+  getStreamTicket: (episodeId: string, audioTrackIndex?: number, clientType?: 'browser' | 'native') =>
+    window.animindDesktop.library.getStreamTicket(episodeId, audioTrackIndex, clientType) as Promise<StreamTicket>,
   getAudioTracks: (episodeId: string) => window.animindDesktop.library.getAudioTracks(episodeId),
   getSubtitles: (episodeId: string) => window.animindDesktop.library.getSubtitles(episodeId) as Promise<SubtitleTrack[]>,
 
@@ -25,10 +25,13 @@ export const desktopApi = {
   stop: () => window.animindDesktop.player.stop(),
   seek: (seconds: number) => window.animindDesktop.player.seek(seconds),
   getPlayerState: () => window.animindDesktop.player.getState(),
+  getPlayerAudioState: () => window.animindDesktop.player.getAudioState() as Promise<{ volume: number; muted: boolean }>,
   isPlayerRunning: () => window.animindDesktop.player.isRunning() as Promise<{ running: boolean }>,
   getTrackList: () => window.animindDesktop.player.getTrackList(),
   setAudioTrack: (trackId: number) => window.animindDesktop.player.setAudioTrack(trackId),
   setSubtitleTrack: (trackId: number | 'no') => window.animindDesktop.player.setSubtitleTrack(trackId),
+  setPlayerVolume: (volume: number) => window.animindDesktop.player.setVolume(volume),
+  setPlayerMuted: (muted: boolean) => window.animindDesktop.player.setMuted(muted),
   addSubtitleContent: (episodeId: string, track: SubtitleTrack) =>
     window.animindDesktop.player.addSubtitleContent(episodeId, track),
 

@@ -148,8 +148,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('library:shows', async () => libraryService.getShows());
   ipcMain.handle('library:showDetails', async (_event, showId: string) => libraryService.getShowDetails(showId));
-  ipcMain.handle('library:streamTicket', async (_event, payload: { episodeId: string; audioTrackIndex?: number }) =>
-    libraryService.getEpisodeStreamTicket(payload.episodeId, payload.audioTrackIndex)
+  ipcMain.handle(
+    'library:streamTicket',
+    async (_event, payload: { episodeId: string; audioTrackIndex?: number; clientType?: 'browser' | 'native' }) =>
+      libraryService.getEpisodeStreamTicket(payload.episodeId, payload.audioTrackIndex, payload.clientType ?? 'browser')
   );
   ipcMain.handle('library:audioTracks', async (_event, episodeId: string) => libraryService.getEpisodeAudioTracks(episodeId));
   ipcMain.handle('library:subtitles', async (_event, episodeId: string) => libraryService.getEpisodeSubtitles(episodeId));
@@ -181,6 +183,13 @@ function registerIpcHandlers(): void {
       return { paused: true, timePos: 0, duration: 0 };
     }
   });
+  ipcMain.handle('player:audioState', async () => {
+    try {
+      return await playerService.getAudioState();
+    } catch {
+      return { volume: 100, muted: false };
+    }
+  });
   ipcMain.handle('player:isRunning', async () => playerService.isRunning());
   ipcMain.handle('player:trackList', async () => {
     try {
@@ -197,6 +206,14 @@ function registerIpcHandlers(): void {
     await playerService.setSubtitleTrack(trackId);
     return { ok: true };
   });
+  ipcMain.handle('player:setVolume', async (_event, volume: number) => {
+    await playerService.setVolume(volume);
+    return { ok: true };
+  });
+  ipcMain.handle('player:setMuted', async (_event, muted: boolean) => {
+    await playerService.setMuted(muted);
+    return { ok: true };
+  });
   ipcMain.handle(
     'player:addSubtitleContent',
     async (_event, payload: { episodeId: string; track: { id: string; label: string; language: string; content: string } }) => {
@@ -210,8 +227,7 @@ function registerIpcHandlers(): void {
     progressService.getProgress(payload.animeId, payload.episodeIndex)
   );
   ipcMain.handle('progress:save', async (_event, payload: { animeId: string; episodeIndex: number; timestamp: number }) => {
-    await progressService.saveProgress(payload.animeId, payload.episodeIndex, payload.timestamp);
-    return { ok: true };
+    return progressService.saveProgress(payload.animeId, payload.episodeIndex, payload.timestamp);
   });
 }
 
