@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
@@ -63,6 +63,10 @@ const cacheDir = path.join(app.getPath('userData'), 'ChromiumCache');
 app.commandLine.appendSwitch('disk-cache-dir', cacheDir);
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
+// Disable Direct Composition to allow WS_CHILD window blending with transparent HTML
+app.commandLine.appendSwitch('disable-direct-composition');
+app.commandLine.appendSwitch('in-process-gpu');
+
 function createWindow(): void {
   const preloadMjsPath = path.join(currentDir, '../preload/index.mjs');
   const preloadJsPath = path.join(currentDir, '../preload/index.js');
@@ -74,13 +78,17 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 720,
     title: 'Animind Desktop',
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
+
+  mpvEmbeddedBackend.setMainWindow(mainWindow);
 
   mainWindow.webContents.on('preload-error', (_event, preloadErrPath, error) => {
     console.error('[Preload] Failed to load preload script:', preloadErrPath, error?.message || error);
@@ -102,29 +110,50 @@ function createWindow(): void {
   }
 }
 
+/**
+ * resolveSurfaceBounds
+ *
+ * Normalises bounds from the renderer into screen-absolute, DPI-scaled physical
+ * pixels that can be forwarded to the native addon.
+ *
+ * 'screen'  — renderer already sent (window.screenX + rect.left) * devicePixelRatio.
+ *              No further transformation needed.
+ * 'content' — CSS logical pixels relative to viewport (legacy path).
+ *              Offset by the window content area origin and scale by DPI.
+ */
 function resolveSurfaceBounds(
   senderWindow: BrowserWindow | null,
   bounds: { x: number; y: number; width: number; height: number; coordinateSpace?: 'content' | 'screen' },
 ): { x: number; y: number; width: number; height: number } {
-  const width = Math.max(4, Math.round(bounds.width));
+  const traceBounds = process.env.ANIMIND_MPV_TRACE_BOUNDS === '1';
+  const width  = Math.max(4, Math.round(bounds.width));
   const height = Math.max(4, Math.round(bounds.height));
 
+  // 'screen' — already DPI-scaled physical pixels. Pass through as-is.
   if (bounds.coordinateSpace === 'screen' || !senderWindow) {
-    return {
-      x: Math.round(bounds.x),
-      y: Math.round(bounds.y),
-      width,
-      height,
-    };
+    const resolved = { x: Math.round(bounds.x), y: Math.round(bounds.y), width, height };
+    if (traceBounds) {
+      console.log('[MPV bounds] resolveSurfaceBounds(screen/passthrough)', { input: bounds, resolved });
+    }
+    return resolved;
   }
 
+  // 'content' (legacy) — CSS logical pixels → physical screen pixels.
   const contentBounds = senderWindow.getContentBounds();
-  return {
-    x: Math.round(contentBounds.x + bounds.x),
-    y: Math.round(contentBounds.y + bounds.y),
-    width,
-    height,
+  const display = screen.getDisplayMatching(contentBounds);
+  const sf = display.scaleFactor || 1;
+  const resolved = {
+    x:      Math.round((contentBounds.x + bounds.x) * sf),
+    y:      Math.round((contentBounds.y + bounds.y) * sf),
+    width:  Math.max(4, Math.round(bounds.width  * sf)),
+    height: Math.max(4, Math.round(bounds.height * sf)),
   };
+  if (traceBounds) {
+    console.log('[MPV bounds] resolveSurfaceBounds(content→screen)', {
+      input: bounds, contentBounds, scaleFactor: sf, resolved,
+    });
+  }
+  return resolved;
 }
 
 function registerIpcHandlers(): void {
@@ -201,7 +230,8 @@ function registerIpcHandlers(): void {
 
   // ── Player ────────────────────────────────────────────────────────────────
   ipcMain.handle('player:open', async (_event, payload: { url: string; title?: string }) => {
-    await playerService.open(payload.url, payload.title ?? 'Animind Desktop');
+    const token = await authService.getAccessToken().catch(() => null);
+    await playerService.open(payload.url, payload.title ?? 'Animind Desktop', token ?? undefined);
     return { ok: true };
   });
   ipcMain.handle('player:play', async () => {

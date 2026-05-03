@@ -1,19 +1,27 @@
 /**
  * EmbeddedPlayerHost.tsx
  *
- * Renders an invisible placeholder div whose screen-space bounds are
- * continuously mirrored to a child BrowserWindow in the main process.
- * mpv renders into that child window so video appears "inside" this div.
+ * Renders an invisible placeholder <div> whose screen-space bounds are
+ * continuously mirrored to the native mpv child window in the main process.
  *
- * State (paused / timePos / duration) is received via the preload's
- * onStateChanged subscription which the main process polls every 500 ms.
+ * COORDINATE MODEL (Jellyfin-style):
+ *   getBoundingClientRect() returns CSS logical pixels relative to the viewport.
+ *   We add window.screenX / window.screenY (also logical) to get screen coords.
+ *   Then multiply by window.devicePixelRatio to get physical (DPI-scaled) pixels.
+ *   The main process receives these physical pixels and forwards them to the
+ *   native addon, which calls ScreenToClient(mainWindowHwnd) to convert to
+ *   parent-relative child coordinates — no DPI adjustment needed in main.
+ *
+ * BOUNDS SYNC STRATEGY:
+ *   - ResizeObserver fires when the div changes size (layout changes, panel open/close)
+ *   - 'resize' event fires when the OS window changes size (maximize, restore)
+ *   - A 1500ms fallback poll catches OS window MOVES (no DOM event fires for those)
+ *   - A debounce queue avoids redundant IPC calls on rapid resize
  */
 import React, { forwardRef, useCallback, useEffect, useRef } from 'react';
 import { desktopApi } from '../api';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public handle exposed via forwardRef
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Public handle ────────────────────────────────────────────────────────────
 export interface EmbeddedPlayerHandle {
   play: () => Promise<void>;
   pause: () => Promise<void>;
@@ -35,80 +43,45 @@ interface Props {
   onError?: (error: string) => void;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Round to nearest integer — setBounds requires integers. */
-function rounded(n: number) { return Math.round(n); }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 export const EmbeddedPlayerHost = forwardRef<EmbeddedPlayerHandle, Props>(
   ({ className, streamUrl, onStateChange, onError }, ref) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const boundsSyncFrameRef = useRef<number | null>(null);
-    const boundsSyncTimerRef = useRef<number | null>(null);
-    const boundsSyncInFlightRef = useRef(false);
-    const pendingBoundsRef = useRef<{ x: number; y: number; width: number; height: number; coordinateSpace: 'content' } | null>(null);
-    const lastBoundsKeyRef = useRef('');
+    const containerRef        = useRef<HTMLDivElement>(null);
+    const onErrorRef          = useRef(onError);
+    const rafRef              = useRef<number | null>(null);
+    const pollTimerRef        = useRef<number | null>(null);
+    const inFlightRef         = useRef(false);
+    const pendingBoundsRef    = useRef<{
+      x: number; y: number; width: number; height: number; coordinateSpace: 'screen';
+    } | null>(null);
+    const lastBoundsKeyRef    = useRef('');
 
-    // Local state mirror so the imperative handle always has fresh values
-    const stateRef = useRef({
-      paused: true,
-      timePos: 0,
-      duration: 0,
-      volume: 85,
-      muted: false,
-    });
+    useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
-    // ── Imperative handle ───────────────────────────────────────────────────
+    // Local state mirror for the imperative handle
+    const stateRef = useRef({ paused: true, timePos: 0, duration: 0, volume: 85, muted: false });
+
+    // ── Imperative handle ─────────────────────────────────────────────────
     React.useImperativeHandle(ref, () => ({
-      async play() {
-        try {
-          await desktopApi.play();
-          stateRef.current.paused = false;
-        } catch (err) {
-          onError?.(`Play failed: ${err instanceof Error ? err.message : String(err)}`);
-          throw err;
-        }
+      async play()  {
+        try { await desktopApi.play();  stateRef.current.paused = false; }
+        catch (err) { onError?.(`Play failed: ${err instanceof Error ? err.message : String(err)}`); throw err; }
       },
       async pause() {
-        try {
-          await desktopApi.pause();
-          stateRef.current.paused = true;
-        } catch (err) {
-          onError?.(`Pause failed: ${err instanceof Error ? err.message : String(err)}`);
-          throw err;
-        }
+        try { await desktopApi.pause(); stateRef.current.paused = true;  }
+        catch (err) { onError?.(`Pause failed: ${err instanceof Error ? err.message : String(err)}`); throw err; }
       },
       async seek(time: number) {
-        try {
-          await desktopApi.seek(time);
-          stateRef.current.timePos = time;
-        } catch (err) {
-          onError?.(`Seek failed: ${err instanceof Error ? err.message : String(err)}`);
-          throw err;
-        }
+        try { await desktopApi.seek(time); stateRef.current.timePos = time; }
+        catch (err) { onError?.(`Seek failed: ${err instanceof Error ? err.message : String(err)}`); throw err; }
       },
       async setVolume(volume: number) {
-        try {
-          await desktopApi.setPlayerVolume(volume);
-          stateRef.current.volume = volume;
-        } catch (err) {
-          onError?.(`setVolume failed: ${err instanceof Error ? err.message : String(err)}`);
-          throw err;
-        }
+        try { await desktopApi.setPlayerVolume(volume); stateRef.current.volume = volume; }
+        catch (err) { onError?.(`setVolume failed: ${err instanceof Error ? err.message : String(err)}`); throw err; }
       },
       async setMuted(muted: boolean) {
-        try {
-          await desktopApi.setPlayerMuted(muted);
-          stateRef.current.muted = muted;
-        } catch (err) {
-          onError?.(`setMuted failed: ${err instanceof Error ? err.message : String(err)}`);
-          throw err;
-        }
+        try { await desktopApi.setPlayerMuted(muted); stateRef.current.muted = muted; }
+        catch (err) { onError?.(`setMuted failed: ${err instanceof Error ? err.message : String(err)}`); throw err; }
       },
       async stop() {
         try {
@@ -126,39 +99,40 @@ export const EmbeddedPlayerHost = forwardRef<EmbeddedPlayerHandle, Props>(
       get muted()       { return stateRef.current.muted; },
     }), [onError]);
 
-    // ── Bounds sync ─────────────────────────────────────────────────────────
-    // Send bounds in renderer-content coordinates (relative to the webContents
-    // viewport). Main process maps them to absolute window coordinates.
+    // ── Bounds sync ───────────────────────────────────────────────────────
+    //
+    // We compute PHYSICAL (DPI-aware) screen-absolute pixels and send them
+    // to the main process. The native addon then does ScreenToClient() against
+    // the main window HWND to position the child window correctly.
+    //
     const flushBounds = useCallback(async () => {
-      if (boundsSyncInFlightRef.current || !pendingBoundsRef.current) return;
-
+      if (inFlightRef.current || !pendingBoundsRef.current) return;
       const bounds = pendingBoundsRef.current;
       pendingBoundsRef.current = null;
-      const key = JSON.stringify(bounds);
-      if (key === lastBoundsKeyRef.current) {
-        return;
-      }
+      const key = `${bounds.x},${bounds.y},${bounds.width},${bounds.height}`;
+      if (key === lastBoundsKeyRef.current) return;
 
-      boundsSyncInFlightRef.current = true;
+      inFlightRef.current = true;
       try {
         await desktopApi.setSurfaceBounds(bounds);
         lastBoundsKeyRef.current = key;
       } catch (err) {
-        onError?.(`Failed to sync embedded player bounds: ${err instanceof Error ? err.message : String(err)}`);
+        onErrorRef.current?.(
+          `Failed to sync embedded player bounds: ${err instanceof Error ? err.message : String(err)}`
+        );
       } finally {
-        boundsSyncInFlightRef.current = false;
+        inFlightRef.current = false;
+        // If another bounds update arrived while this one was in-flight, send it now.
         if (pendingBoundsRef.current) {
-          window.setTimeout(() => {
-            void flushBounds();
-          }, 0);
+          window.setTimeout(() => { void flushBounds(); }, 0);
         }
       }
-    }, [onError]);
+    }, []);
 
     const queueBoundsSync = useCallback(() => {
-      if (boundsSyncFrameRef.current !== null) return;
-      boundsSyncFrameRef.current = window.requestAnimationFrame(() => {
-        boundsSyncFrameRef.current = null;
+      if (rafRef.current !== null) return; // already scheduled this frame
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
         void flushBounds();
       });
     }, [flushBounds]);
@@ -166,86 +140,83 @@ export const EmbeddedPlayerHost = forwardRef<EmbeddedPlayerHandle, Props>(
     const syncBounds = useCallback(() => {
       const el = containerRef.current;
       if (!el) return;
-
       const rect = el.getBoundingClientRect();
 
+      // Convert CSS logical pixels → physical screen pixels (DPI-aware).
+      // window.screenX/Y + rect.left/top gives logical screen coords.
+      // Multiply by devicePixelRatio for physical pixels.
+      const dpr = window.devicePixelRatio || 1;
       const bounds = {
-        x:      rounded(rect.left),
-        y:      rounded(rect.top),
-        width:  rounded(rect.width),
-        height: rounded(rect.height),
-        coordinateSpace: 'content' as const,
+        x:              Math.round((window.screenX + rect.left) * dpr),
+        y:              Math.round((window.screenY + rect.top)  * dpr),
+        width:          Math.max(4, Math.round(rect.width  * dpr)),
+        height:         Math.max(4, Math.round(rect.height * dpr)),
+        coordinateSpace: 'screen' as const,
       };
-
-      // Clamp to minimum so the child window is always valid
-      if (bounds.width  < 4) bounds.width  = 4;
-      if (bounds.height < 4) bounds.height = 4;
 
       pendingBoundsRef.current = bounds;
       queueBoundsSync();
     }, [queueBoundsSync]);
 
-    // Sync bounds whenever the div size changes (ResizeObserver) or the
-    // window itself moves/resizes.
+    // Attach observers
     useEffect(() => {
       const el = containerRef.current;
       if (!el) return;
 
-      // Initial sync
-      syncBounds();
+      syncBounds(); // initial
 
       const ro = new ResizeObserver(syncBounds);
       ro.observe(el);
-
       window.addEventListener('resize', syncBounds);
       window.addEventListener('scroll', syncBounds, true);
 
-      // Poll slowly to catch native window drags where DOM resize events do not fire.
-      // (no DOM event fires during an OS drag of the Electron window)
-      boundsSyncTimerRef.current = window.setInterval(syncBounds, 1500);
+      // Fallback poll for OS window moves (no DOM event fires during a native drag)
+      pollTimerRef.current = window.setInterval(syncBounds, 1500);
 
       return () => {
         ro.disconnect();
         window.removeEventListener('resize', syncBounds);
         window.removeEventListener('scroll', syncBounds, true);
-        if (boundsSyncTimerRef.current !== null) {
-          window.clearInterval(boundsSyncTimerRef.current);
-          boundsSyncTimerRef.current = null;
-        }
-        if (boundsSyncFrameRef.current !== null) {
-          window.cancelAnimationFrame(boundsSyncFrameRef.current);
-          boundsSyncFrameRef.current = null;
-        }
+        if (pollTimerRef.current !== null) { window.clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+        if (rafRef.current !== null)        { window.cancelAnimationFrame(rafRef.current); rafRef.current = null; }
       };
     }, [syncBounds]);
 
-    // ── Show/hide surface with component lifecycle ──────────────────────────
-    useEffect(() => {
-      void desktopApi.showSurface();
-      return () => {
-        // Ensure embedded backend does not keep playing audio after unmount.
-        void desktopApi.stop();
-      };
-    }, []);
+  useEffect(() => {
+    document.documentElement.style.backgroundColor = 'transparent';
+    document.body.style.backgroundColor = 'transparent';
+    return () => {
+      document.documentElement.style.backgroundColor = '';
+      document.body.style.backgroundColor = '';
+    };
+  }, []);
 
-    // ── Load video when streamUrl changes ───────────────────────────────────
+  useEffect(() => {
+    void desktopApi.showSurface();
+    return () => {
+      void desktopApi.hideSurface();
+      void desktopApi.stop();
+    };
+  }, []);
+
+    // ── Load video when streamUrl changes ─────────────────────────────────
     useEffect(() => {
       if (!streamUrl) return;
       const load = async () => {
         try {
           await desktopApi.openPlayer(streamUrl);
+          // After mpv opens, push current bounds immediately so the first frame
+          // appears in the right place (not the top-left corner of the window).
+          syncBounds();
         } catch (err) {
-          onError?.(`Failed to open stream: ${err instanceof Error ? err.message : String(err)}`);
+          onErrorRef.current?.(`Failed to open stream: ${err instanceof Error ? err.message : String(err)}`);
         }
       };
       void load();
-    }, [streamUrl, onError]);
+    }, [streamUrl, syncBounds]);
 
-    // ── Subscribe to state events from main process ─────────────────────────
+    // ── Subscribe to playback state events ────────────────────────────────
     useEffect(() => {
-      // The preload exposes onStateChanged which maps ipcRenderer → callback.
-      // Main process polls native.getState() every 500 ms and pushes via
-      // mainWindow.webContents.send('player:stateChanged', state).
       const unsubscribe = window.animindDesktop.player.onStateChanged(
         (state: { paused: boolean; timePos: number; duration: number }) => {
           stateRef.current.paused   = state.paused;
@@ -257,9 +228,9 @@ export const EmbeddedPlayerHost = forwardRef<EmbeddedPlayerHandle, Props>(
       return unsubscribe;
     }, [onStateChange]);
 
-    // ── Render ──────────────────────────────────────────────────────────────
-    // The div is intentionally transparent / black — the child BrowserWindow
-    // (with mpv rendering inside it) sits directly behind this exact rectangle.
+    // ── Render ────────────────────────────────────────────────────────────
+    // This div is an invisible placeholder. mpv paints behind/below it via a
+    // native Win32 child window, not inside the DOM.
     return (
       <div
         ref={containerRef}
@@ -267,10 +238,9 @@ export const EmbeddedPlayerHost = forwardRef<EmbeddedPlayerHandle, Props>(
         style={{
           width: '100%',
           height: '100%',
-          backgroundColor: '#000',
+          backgroundColor: 'transparent',
           position: 'relative',
           overflow: 'hidden',
-          // No content here — mpv paints behind this via its own child window
         }}
       />
     );

@@ -3,6 +3,7 @@ import type { AudioTrack, Episode, SubtitleTrack } from '../types';
 import type { PendingSync } from '../App';
 import { useSyncplay } from '../hooks/useSyncplay';
 import { SyncplayPanel } from '../components/SyncplayPanel';
+import { EmbeddedPlayerHost } from '../components/EmbeddedPlayerHost';
 import { desktopApi } from '../api';
 
 type IconProps = { className?: string };
@@ -203,12 +204,23 @@ export function PlayerPage(props: Props) {
   const lastStableTimeRef = useRef(0);
 
   const [playbackTarget, setPlaybackTarget] = useState<'html5' | 'mpv'>('html5');
+  
+  useEffect(() => {
+    if (streamInfo?.clientType === 'native') {
+      setPlaybackTarget('mpv');
+    } else {
+      setPlaybackTarget('html5');
+    }
+  }, [streamInfo?.clientType]);
+
   const [mpvRunning, setMpvRunning] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const suppressSyncEmitRef = useRef(false);
   const suppressSyncCountRef = useRef(0);
-  const playbackTargetRef = useRef<'html5' | 'mpv'>('html5');
+  const playbackTargetRef = useRef<'html5' | 'mpv'>(
+    streamInfo?.clientType === 'native' ? 'mpv' : 'html5'
+  );
   const speedSeekTimerRef = useRef<number | null>(null);
   const stallDebounceRef = useRef<number | null>(null);
   const stallSentRef = useRef(false);
@@ -1070,6 +1082,19 @@ export function PlayerPage(props: Props) {
 
   const durationLabel = effectiveDuration > 0 ? formatTime(effectiveDuration) : '--:--';
 
+  const handleEmbeddedPlayerError = useCallback((message: string) => {
+    const normalized = message.toLowerCase();
+    if (normalized.includes('application control policy has blocked this file')
+      || normalized.includes('enterprise signing level requirements')) {
+      setPlayerError(
+        'Embedded player is blocked by Windows enterprise policy (Code Integrity/WDAC). ' +
+        'Ask your admin to allow native/build/Release/addon.node and vendor/mpv/win-x64/libmpv-2.dll.',
+      );
+      return;
+    }
+    setPlayerError(message);
+  }, []);
+
   return (
     <div
       ref={shellRef}
@@ -1100,11 +1125,12 @@ export function PlayerPage(props: Props) {
       <video
         ref={videoRef}
         className="video-element"
-        src={streamUrl}
+        src={playbackTarget === 'html5' ? streamUrl : undefined}
         playsInline
         preload="metadata"
         onClick={togglePlayback}
         onDoubleClick={() => void toggleFullscreen()}
+        style={{ display: playbackTarget === 'html5' ? 'block' : 'none' }}
       >
         {subtitleUrl && selectedSubtitle ? (
           <track
@@ -1116,6 +1142,16 @@ export function PlayerPage(props: Props) {
           />
         ) : null}
       </video>
+
+      {playbackTarget === 'mpv' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+          <EmbeddedPlayerHost
+            streamUrl={streamUrl}
+            onStateChange={() => {}}
+            onError={handleEmbeddedPlayerError}
+          />
+        </div>
+      )}
 
       {showCenterPlay ? (
         <button

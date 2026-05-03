@@ -520,6 +520,16 @@
     "standalone_static_library": 1,
     "msbuild_path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe",
     "target": "41.3.0",
-    "runtime": "electron"
+    "runtime": "electron",
+    "user_agent": "npm/11.6.2 node/v25.2.1 win32 x64 workspaces/false",
+    "userconfig": "C:\\Users\\gudiy\\.npmrc",
+    "prefix": "C:\\Users\\gudiy\\AppData\\Roaming\\npm",
+    "npm_version": "11.6.2",
+    "node_gyp": "C:\\Program Files\\nodejs\\node_modules\\npm\\node_modules\\node-gyp\\bin\\node-gyp.js",
+    "local_prefix": "C:\\Users\\gudiy\\Videos\\anims\\animind-desktop-player",
+    "init_module": "C:\\Users\\gudiy\\.npm-init.js",
+    "global_prefix": "C:\\Users\\gudiy\\AppData\\Roaming\\npm",
+    "globalconfig": "C:\\Users\\gudiy\\AppData\\Roaming\\npm\\etc\\npmrc",
+    "cache": "C:\\Users\\gudiy\\AppData\\Local\\npm-cache"
   }
 }

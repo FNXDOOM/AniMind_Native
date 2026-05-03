@@ -140,7 +140,17 @@ function loadAddon(): void {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      addonLoadError = `Failed to load addon from "${candidate}": ${message}`;
+      if (
+        message.toLowerCase().includes('application control policy has blocked this file')
+        || message.toLowerCase().includes('enterprise signing level requirements')
+      ) {
+        addonLoadError =
+          `Failed to load addon from "${candidate}": ${message}. ` +
+          'Windows Code Integrity / WDAC policy is blocking native module loading. ' +
+          'Ask your administrator to allow this addon.node and vendor/mpv/win-x64/libmpv-2.dll.';
+      } else {
+        addonLoadError = `Failed to load addon from "${candidate}": ${message}`;
+      }
       console.warn('[MPV addon] Failed to load from', candidate, ':', err);
     }
   }
@@ -186,14 +196,21 @@ export function getAvailabilityDetails(): AddonAvailabilityDetails {
 export async function initialize(hwnd: bigint): Promise<boolean> {
   loadAddon();
   if (!addon || typeof addon.initialize !== 'function') return false;
-  try {
-    const ok = Boolean(addon.initialize(hwnd));
-    if (ok) addonInitialized = true;
-    return ok;
-  } catch (err) {
-    console.error('[MPV addon] initialize() threw:', err);
-    return false;
-  }
+  return new Promise((resolve, reject) => {
+    try {
+      addon.initialize(hwnd, (err: Error | null, ok: boolean) => {
+        if (err) {
+          reject(err);
+        } else {
+          const success = Boolean(ok);
+          if (success) addonInitialized = true;
+          resolve(success);
+        }
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 export function getHeartbeat(): bigint {
@@ -204,6 +221,12 @@ export function getHeartbeat(): bigint {
   } catch {
     return 0n;
   }
+}
+
+export function setWindowBounds(x: number, y: number, w: number, h: number): boolean {
+  loadAddon();
+  if (!addon || typeof addon.setWindowBounds !== 'function') return false;
+  return addon.setWindowBounds(x, y, w, h);
 }
 
 /**
@@ -224,7 +247,7 @@ export async function setWindowId(hwnd: bigint): Promise<boolean> {
  * Load a URL or local file path into mpv and begin playback.
  * Auto-initializes mpv if not already done.
  */
-export async function open(url: string): Promise<boolean> {
+export async function open(url: string, authToken?: string): Promise<boolean> {
   loadAddon();
   if (!addon || typeof addon.open !== 'function') {
     throw new Error('native addon not available');
@@ -232,7 +255,7 @@ export async function open(url: string): Promise<boolean> {
   if (!addonInitialized) {
     throw new Error('mpv not initialized — call initialize(hwnd) before open()');
   }
-  return Boolean(addon.open(String(url)));
+  return Boolean(addon.open(String(url), authToken ? String(authToken) : undefined));
 }
 
 export async function play(): Promise<boolean> {

@@ -27,7 +27,7 @@ export interface MpvAvailability {
 
 export interface PlayerBackend {
   checkAvailability(pathOverride?: string): Promise<MpvAvailability>;
-  open(url: string, title?: string): Promise<void>;
+  open(url: string, title?: string, authToken?: string): Promise<void>;
   stop(): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;

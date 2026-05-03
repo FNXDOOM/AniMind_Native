@@ -131,7 +131,7 @@ export class MpvExternalBackend implements PlayerBackend {
     });
   }
 
-  async open(url: string, title = 'Animind Desktop'): Promise<void> {
+  async open(url: string, title = 'Animind Desktop', authToken?: string): Promise<void> {
     await this.stop();
 
     const mpvPath = await this.getMpvPath();

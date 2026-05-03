@@ -173,18 +173,36 @@ export default function App() {
       setCloudSubtitles(subtitles);
       setAudioTracks(tracks ?? []);
 
-      if (ticket.clientType === 'native') {
-        const browserTrack = (tracks ?? []).find(
-          track => track.browserSupported && typeof track.streamIndex === 'number' && track.streamIndex >= 0,
-        );
-        if (browserTrack) {
-          try {
-            ticket = await desktopApi.getStreamTicket(episode.id, browserTrack.streamIndex, 'browser');
-            selectedTrackIndex = browserTrack.streamIndex;
-          } catch {
-            // Keep original ticket
+      // Decide clientType based on browser support and codecs
+      let preferredClientType: 'browser' | 'native' = 'native';
+      const browserTrack = (tracks ?? []).find(
+        track => {
+          if (!track.browserSupported) return false;
+          // Chromium (Electron) usually doesn't support EAC3/DD+ due to licensing.
+          // If the codec is eac3, force native player.
+          const codec = (track.codec || '').toLowerCase();
+          if (codec.includes('eac3') || codec.includes('ec-3') || codec.includes('dd+')) {
+            return false;
           }
+          return typeof track.streamIndex === 'number' && track.streamIndex >= 0;
         }
+      );
+
+      if (browserTrack) {
+        preferredClientType = 'browser';
+        selectedTrackIndex = browserTrack.streamIndex;
+      }
+
+      try {
+        ticket = await desktopApi.getStreamTicket(
+          episode.id,
+          selectedTrackIndex ?? undefined,
+          preferredClientType
+        );
+      } catch (err) {
+        console.error('[App] Failed to get preferred stream ticket:', err);
+        // Fallback to whatever works
+        ticket = await desktopApi.getStreamTicket(episode.id, undefined, 'native');
       }
 
       setStreamInfo(ticket);
