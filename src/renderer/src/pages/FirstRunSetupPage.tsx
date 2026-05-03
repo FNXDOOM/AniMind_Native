@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import type { AppSettings, MpvAvailability, SetupStatus } from '../types';
 
 type Props = {
@@ -20,7 +20,7 @@ export function FirstRunSetupPage({ initialStatus, onSave, onProbeMpv }: Props) 
       <div className="panel setup-panel">
         <h1>First-Time Setup</h1>
         <p className="muted">
-          Configure backend, Supabase, and mpv before using Animind Desktop.
+          Configure backend, Clerk authentication, and mpv before using Animind Desktop.
         </p>
 
         <label>
@@ -33,21 +33,15 @@ export function FirstRunSetupPage({ initialStatus, onSave, onProbeMpv }: Props) 
         </label>
 
         <label>
-          Supabase URL
+          Clerk Publishable Key
           <input
-            value={settings.supabaseUrl}
-            onChange={e => setSettings(s => ({ ...s, supabaseUrl: e.target.value }))}
-            placeholder="https://xxx.supabase.co"
+            value={settings.clerkPublishableKey}
+            onChange={e => setSettings(s => ({ ...s, clerkPublishableKey: e.target.value }))}
+            placeholder="pk_test_..."
           />
-        </label>
-
-        <label>
-          Supabase Anon Key
-          <input
-            value={settings.supabaseAnonKey}
-            onChange={e => setSettings(s => ({ ...s, supabaseAnonKey: e.target.value }))}
-            placeholder="eyJ..."
-          />
+          <span className="muted" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+            Found in your Clerk dashboard -&gt; API Keys
+          </span>
         </label>
 
         <label>
@@ -108,3 +102,4 @@ export function FirstRunSetupPage({ initialStatus, onSave, onProbeMpv }: Props) 
     </div>
   );
 }
+

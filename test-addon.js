@@ -1,0 +1,1 @@
+const addon = require('./native/build/Release/addon.node'); addon.initialize(); addon.open('https://commondatastorage.googleapis.com/gtv-videos-library/sample/BigBuckBunny.mp4'); addon.play(); console.log('playing:', addon.getState());  

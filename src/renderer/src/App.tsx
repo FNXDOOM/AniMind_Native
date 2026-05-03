@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { desktopApi } from './api';
 import { useLibrary } from './hooks/useLibrary';
 import type { AppSettings, AudioTrack, Episode, MpvAvailability, SessionInfo, SetupStatus, StreamTicket, SubtitleTrack } from './types';
@@ -10,10 +10,8 @@ import { FirstRunSetupPage } from './pages/FirstRunSetupPage';
 
 type View = 'library' | 'player' | 'settings';
 
-// Room code the user wants to join *before* hitting play — carried into the player on launch
 export type PendingSync = { type: 'join'; code: string } | { type: 'create' } | null;
 
-// Small sidebar component: lets another user type a room code and join a friend's watch party
 function SidebarSyncJoin({ onJoin }: { onJoin: (code: string) => void }) {
   const [code, setCode] = React.useState('');
   const trimmed = code.trim().toUpperCase();
@@ -68,7 +66,13 @@ export default function App() {
   const [opening, setOpening] = useState(false);
   const [cloudSubtitles, setCloudSubtitles] = useState<SubtitleTrack[]>([]);
 
-  const { shows, selectedShow, loadingShows, loadingDetails, error, loadShowDetails, clearSelectedShow } = useLibrary();
+  const { shows, selectedShow, loadingShows, loadingDetails, error, loadShows, loadShowDetails, clearSelectedShow } = useLibrary();
+
+  useEffect(() => {
+    if (session && view === 'library') {
+      void loadShows();
+    }
+  }, [session, view, loadShows]);
 
   const episodeIndex = useMemo(() => {
     if (!selectedShow || !currentEpisode) return null;
@@ -76,10 +80,12 @@ export default function App() {
     return idx >= 0 ? idx : null;
   }, [selectedShow, currentEpisode]);
 
+  // ── Setup + Session init ──────────────────────────────────────────────────
+
   const loadSetup = useCallback(async () => {
     setSetupInitError('');
     setSetupStatus(null);
-    (async () => {
+    try {
       if (!(window as any).animindDesktop) {
         throw new Error('Preload bridge unavailable. Ensure preload script loaded correctly.');
       }
@@ -88,17 +94,29 @@ export default function App() {
       if (!status.ready) return;
       const sess = await desktopApi.getSession().catch(() => null);
       setSession(sess);
-    })().catch((err: any) => {
+    } catch (err: any) {
       const message = err?.message ? String(err.message) : 'Failed to load setup state. Please retry.';
       console.error('[Setup] Initialization failed:', err);
       setSetupInitError(message);
       setSession(null);
-    });
+    }
   }, []);
 
   useEffect(() => {
     void loadSetup();
+  }, [loadSetup]);
+
+  // Listen for OAuth callback from main process (Google sign-in deep link)
+  useEffect(() => {
+    const unsub = desktopApi.onSessionChanged(async () => {
+      const sess = await desktopApi.getSession().catch(() => null);
+      setSession(sess);
+      setAuthError('');
+    });
+    return unsub;
   }, []);
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
 
   const signIn = useCallback(async (email: string, password: string) => {
     setAuthError('');
@@ -114,8 +132,8 @@ export default function App() {
   const signInWithGoogle = useCallback(async () => {
     setAuthError('');
     try {
-      const result = await desktopApi.signInWithGoogle();
-      setSession({ userId: result.userId, email: result.email });
+      // This opens the system browser; the result arrives via the onSessionChanged listener above
+      await desktopApi.signInWithGoogle();
     } catch (err: any) {
       setAuthError(err?.message ?? 'Google Sign-In failed');
       throw err;
@@ -135,11 +153,12 @@ export default function App() {
     setView('library');
   }, []);
 
+  // ── Playback ──────────────────────────────────────────────────────────────
+
   const startEpisode = useCallback(async (animeId: string, animeTitle: string, episode: Episode, sync?: PendingSync) => {
     setPlayerError('');
     setProgressWarning('');
     setOpening(true);
-    // Capture episodes snapshot NOW before any async gap (fixes stale selectedShow closure)
     const episodesSnapshot = selectedShow?.anime.id === animeId ? selectedShow.episodes : null;
     try {
       if (sync !== undefined) setPendingSync(sync);
@@ -154,7 +173,6 @@ export default function App() {
       setCloudSubtitles(subtitles);
       setAudioTracks(tracks ?? []);
 
-      // If backend still hands back a native-oriented ticket, retry with a browser-supported track.
       if (ticket.clientType === 'native') {
         const browserTrack = (tracks ?? []).find(
           track => track.browserSupported && typeof track.streamIndex === 'number' && track.streamIndex >= 0,
@@ -164,7 +182,7 @@ export default function App() {
             ticket = await desktopApi.getStreamTicket(episode.id, browserTrack.streamIndex, 'browser');
             selectedTrackIndex = browserTrack.streamIndex;
           } catch {
-            // Keep original ticket if retry fails.
+            // Keep original ticket
           }
         }
       }
@@ -194,7 +212,6 @@ export default function App() {
 
   const switchAudioTrack = useCallback(async (streamIndex: number | null, currentTime: number) => {
     if (!currentEpisode) return;
-
     setPlayerError('');
     setOpening(true);
     const savedTime = Math.max(0, currentTime || 0);
@@ -249,6 +266,8 @@ export default function App() {
     return desktopApi.testMpv(mpvPath);
   }, []);
 
+  // ── Render gates ──────────────────────────────────────────────────────────
+
   if (!setupStatus) {
     return (
       <div className="center-screen">
@@ -273,12 +292,22 @@ export default function App() {
   }
 
   if (!session) {
-    return <LoginPage onSubmit={signIn} onGoogleSignIn={signInWithGoogle} error={authError} />;
+    return (
+      <LoginPage
+        onSignedIn={async () => {
+          const sess = await desktopApi.getSession().catch(() => null);
+          if (!sess?.userId) {
+            throw new Error(authError || 'Sign-in did not complete.');
+          }
+          setSession(sess);
+          setAuthError('');
+        }}
+      />
+    );
   }
 
   return (
     <>
-      {/* Full-screen immersive player — rendered outside the shell so nothing clips it */}
       {view === 'player' && currentEpisode && currentAnimeId ? (
         <PlayerPage
           currentUserId={session.userId}
@@ -311,7 +340,6 @@ export default function App() {
               <button title="Settings" className={`nav-icon-btn ${view === 'settings' ? 'active' : ''}`} onClick={openSettings}>Settings</button>
             </nav>
 
-            {/* Sidebar quick-join: join an existing SyncPlay room before picking an episode */}
             <SidebarSyncJoin
               onJoin={(code) => setPendingSync({ type: 'join', code })}
             />

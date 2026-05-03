@@ -72,25 +72,8 @@ export class ProgressService {
     store[keyOf(user.id, animeId, episodeIndex)] = entry;
     await this.saveStore(store);
 
-    try {
-      const supabase = await authService.getSupabaseClient();
-      await supabase
-        .from('progress')
-        .upsert(
-          {
-            user_id: user.id,
-            anime_id: animeId,
-            episode_index: episodeIndex,
-            timestamp,
-            updated_at: entry.updatedAt,
-          },
-          { onConflict: 'user_id, anime_id, episode_index' }
-        );
-    } catch {
-      // Keep local progress even if remote sync fails.
-      return { saved: true, reason: 'local-only' };
-    }
-
+    // Progress is stored locally only. The web frontend syncs to Supabase via
+    // its own Clerk-authenticated Supabase client — the desktop doesn't need to.
     return { saved: true };
   }
 }

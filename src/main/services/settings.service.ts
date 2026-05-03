@@ -4,8 +4,8 @@ import path from 'path';
 
 export interface AppSettings {
   backendUrl: string;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
+  /** Clerk publishable key (pk_test_... or pk_live_...) */
+  clerkPublishableKey: string;
   mpvPath: string;
 }
 
@@ -19,8 +19,7 @@ const SETTINGS_FILE = 'settings.json';
 function getDefaultSettings(): AppSettings {
   return {
     backendUrl: process.env.ANIMIND_BACKEND_URL ?? 'http://localhost:3000',
-    supabaseUrl: process.env.ANIMIND_SUPABASE_URL ?? '',
-    supabaseAnonKey: process.env.ANIMIND_SUPABASE_ANON_KEY ?? '',
+    clerkPublishableKey: process.env.ANIMIND_CLERK_PUBLISHABLE_KEY ?? '',
     mpvPath: process.env.ANIMIND_MPV_PATH ?? 'mpv',
   };
 }
@@ -35,8 +34,7 @@ export class SettingsService {
   validateSettings(settings: AppSettings): SettingsValidationResult {
     const missing: string[] = [];
     if (!settings.backendUrl.trim()) missing.push('backendUrl');
-    if (!settings.supabaseUrl.trim()) missing.push('supabaseUrl');
-    if (!settings.supabaseAnonKey.trim()) missing.push('supabaseAnonKey');
+    if (!settings.clerkPublishableKey.trim()) missing.push('clerkPublishableKey');
     if (!settings.mpvPath.trim()) missing.push('mpvPath');
     return { ready: missing.length === 0, missing };
   }
@@ -54,7 +52,12 @@ export class SettingsService {
     try {
       const raw = await readFile(filePath, 'utf8');
       const parsed = JSON.parse(raw) as Partial<AppSettings>;
-      this.cache = { ...defaults, ...parsed };
+      // Migrate old settings that had supabaseUrl/supabaseAnonKey — drop them silently
+      this.cache = {
+        backendUrl: parsed.backendUrl ?? defaults.backendUrl,
+        clerkPublishableKey: parsed.clerkPublishableKey ?? defaults.clerkPublishableKey,
+        mpvPath: parsed.mpvPath ?? defaults.mpvPath,
+      };
       return this.cache;
     } catch {
       this.cache = defaults;
@@ -65,7 +68,11 @@ export class SettingsService {
 
   async saveSettings(next: Partial<AppSettings>): Promise<AppSettings> {
     const current = await this.getSettings();
-    const merged: AppSettings = { ...current, ...next };
+    const merged: AppSettings = {
+      backendUrl: next.backendUrl ?? current.backendUrl,
+      clerkPublishableKey: next.clerkPublishableKey ?? current.clerkPublishableKey,
+      mpvPath: next.mpvPath ?? current.mpvPath,
+    };
     const dir = app.getPath('userData');
     await mkdir(dir, { recursive: true });
     await writeFile(getSettingsPath(), JSON.stringify(merged, null, 2), 'utf8');

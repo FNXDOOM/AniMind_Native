@@ -80,7 +80,8 @@ export class LibraryService {
 
   async getShows(): Promise<CloudShow[]> {
     const client = await this.getClient();
-    const response = await client.get('/api/shows?limit=200&offset=0');
+    const headers = await this.authHeaders().catch(() => ({}));
+    const response = await client.get('/api/shows?limit=200&offset=0', { headers });
     return (response.data?.data ?? []) as CloudShow[];
   }
 

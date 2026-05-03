@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import type { AppSettings } from '../types';
 
 type Props = {
@@ -9,8 +9,7 @@ type Props = {
 export function SettingsPage({ onLoad, onSave }: Props) {
   const [settings, setSettings] = useState<AppSettings>({
     backendUrl: '',
-    supabaseUrl: '',
-    supabaseAnonKey: '',
+    clerkPublishableKey: '',
     mpvPath: 'mpv',
   });
   const [status, setStatus] = useState('');
@@ -22,7 +21,7 @@ export function SettingsPage({ onLoad, onSave }: Props) {
   return (
     <div className="panel settings-panel">
       <h2>Settings</h2>
-      <p className="muted">Configure backend, Supabase, and native mpv executable path.</p>
+      <p className="muted">Configure backend URL, Clerk authentication key, and native mpv path.</p>
 
       <label>
         Backend URL
@@ -34,19 +33,15 @@ export function SettingsPage({ onLoad, onSave }: Props) {
       </label>
 
       <label>
-        Supabase URL
+        Clerk Publishable Key
         <input
-          value={settings.supabaseUrl}
-          onChange={e => setSettings(s => ({ ...s, supabaseUrl: e.target.value }))}
+          value={settings.clerkPublishableKey}
+          onChange={e => setSettings(s => ({ ...s, clerkPublishableKey: e.target.value }))}
+          placeholder="pk_test_..."
         />
-      </label>
-
-      <label>
-        Supabase Anon Key
-        <input
-          value={settings.supabaseAnonKey}
-          onChange={e => setSettings(s => ({ ...s, supabaseAnonKey: e.target.value }))}
-        />
+        <span className="muted" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+          Found in your Clerk dashboard -&gt; API Keys
+        </span>
       </label>
 
       <label>
@@ -65,7 +60,7 @@ export function SettingsPage({ onLoad, onSave }: Props) {
             setStatus('Saving...');
             try {
               await onSave(settings);
-              setStatus('Saved. Restart app to ensure all settings are reloaded.');
+              setStatus('Saved successfully.');
             } catch (err: any) {
               setStatus(err?.message ?? 'Failed to save settings');
             }
@@ -79,3 +74,4 @@ export function SettingsPage({ onLoad, onSave }: Props) {
     </div>
   );
 }
+

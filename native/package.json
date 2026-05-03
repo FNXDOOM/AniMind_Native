@@ -1,0 +1,16 @@
+{
+  "name": "animind-mpv-addon",
+  "version": "0.1.0",
+  "private": true,
+  "gypfile": true,
+  "scripts": {
+    "build": "node ../scripts/rebuild-native.cjs",
+    "rebuild": "node ../scripts/rebuild-native.cjs"
+  },
+  "dependencies": {
+    "node-addon-api": "^4.3.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^12.3.0"
+  }
+}

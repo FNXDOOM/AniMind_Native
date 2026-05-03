@@ -6,6 +6,7 @@ import { authService } from './services/auth.service';
 import { settingsService } from './services/settings.service';
 import { libraryService } from './services/library.service';
 import { playerService } from './services/player.service';
+import { mpvEmbeddedBackend } from './services/player-backends/mpv-embedded.backend';
 import { subtitleService } from './services/subtitle.service';
 import { progressService } from './services/progress.service';
 
@@ -29,6 +30,8 @@ async function handleProtocolUrl(url: string): Promise<void> {
     const handled = await authService.handleAuthCallback(url);
     if (handled) {
       focusMainWindow();
+      // Tell the renderer that auth state has changed so it can refresh its session
+      mainWindow?.webContents.send('auth:session-changed');
     }
   } catch (error) {
     console.error('[Auth] Failed to handle protocol callback URL:', error);
@@ -99,7 +102,33 @@ function createWindow(): void {
   }
 }
 
+function resolveSurfaceBounds(
+  senderWindow: BrowserWindow | null,
+  bounds: { x: number; y: number; width: number; height: number; coordinateSpace?: 'content' | 'screen' },
+): { x: number; y: number; width: number; height: number } {
+  const width = Math.max(4, Math.round(bounds.width));
+  const height = Math.max(4, Math.round(bounds.height));
+
+  if (bounds.coordinateSpace === 'screen' || !senderWindow) {
+    return {
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width,
+      height,
+    };
+  }
+
+  const contentBounds = senderWindow.getContentBounds();
+  return {
+    x: Math.round(contentBounds.x + bounds.x),
+    y: Math.round(contentBounds.y + bounds.y),
+    width,
+    height,
+  };
+}
+
 function registerIpcHandlers(): void {
+  // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', async () => settingsService.getSettings());
   ipcMain.handle('settings:update', async (_event, patch: Record<string, string>) => settingsService.saveSettings(patch));
   ipcMain.handle('settings:setupStatus', async () => {
@@ -118,23 +147,36 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle('settings:testMpv', async (_event, pathOverride?: string) => playerService.checkAvailability(pathOverride));
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
   ipcMain.handle('auth:session', async () => authService.getSessionInfo());
+
   ipcMain.handle('auth:signin', async (_event, payload: { email: string; password: string }) => {
     const result = await authService.signIn(payload.email, payload.password);
     return {
-      userId: result.user.id,
-      email: result.user.email ?? undefined,
+      userId: result.userId,
+      email: result.email ?? undefined,
       accessToken: result.accessToken,
     };
   });
-  
+
   ipcMain.handle('auth:google', async () => {
     const result = await authService.signInWithGoogle(async (url: string) => {
       await shell.openExternal(url);
     });
     return {
-      userId: result.user.id,
-      email: result.user.email ?? undefined,
+      userId: result.userId,
+      email: result.email ?? undefined,
+      accessToken: result.accessToken,
+    };
+  });
+
+  ipcMain.handle('auth:signin:browser-bridge', async () => {
+    const result = await authService.signInBrowserBridge(async (url: string) => {
+      await shell.openExternal(url);
+    });
+    return {
+      userId: result.userId,
+      email: result.email ?? undefined,
       accessToken: result.accessToken,
     };
   });
@@ -143,9 +185,10 @@ function registerIpcHandlers(): void {
     await authService.signOut();
     return { ok: true };
   });
-  
+
   ipcMain.handle('auth:token', async () => authService.getAccessToken());
 
+  // ── Library ───────────────────────────────────────────────────────────────
   ipcMain.handle('library:shows', async () => libraryService.getShows());
   ipcMain.handle('library:showDetails', async (_event, showId: string) => libraryService.getShowDetails(showId));
   ipcMain.handle(
@@ -156,6 +199,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('library:audioTracks', async (_event, episodeId: string) => libraryService.getEpisodeAudioTracks(episodeId));
   ipcMain.handle('library:subtitles', async (_event, episodeId: string) => libraryService.getEpisodeSubtitles(episodeId));
 
+  // ── Player ────────────────────────────────────────────────────────────────
   ipcMain.handle('player:open', async (_event, payload: { url: string; title?: string }) => {
     await playerService.open(payload.url, payload.title ?? 'Animind Desktop');
     return { ok: true };
@@ -206,6 +250,10 @@ function registerIpcHandlers(): void {
     await playerService.setSubtitleTrack(trackId);
     return { ok: true };
   });
+  ipcMain.handle('player:addSubtitleFile', async (_event, path: string) => {
+    await playerService.addSubtitleFile(path);
+    return { ok: true };
+  });
   ipcMain.handle('player:setVolume', async (_event, volume: number) => {
     await playerService.setVolume(volume);
     return { ok: true };
@@ -222,7 +270,29 @@ function registerIpcHandlers(): void {
       return { ok: true, filePath };
     }
   );
+  ipcMain.handle(
+    'player:setSurfaceBounds',
+    async (event, bounds: { x: number; y: number; width: number; height: number; coordinateSpace?: 'content' | 'screen' }) => {
+      const values = [bounds.x, bounds.y, bounds.width, bounds.height];
+      if (values.some(value => !Number.isFinite(value))) {
+        throw new Error('Invalid surface bounds payload.');
+      }
 
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      mpvEmbeddedBackend.setSurfaceBounds(resolveSurfaceBounds(senderWindow, bounds));
+      return { ok: true };
+    },
+  );
+  ipcMain.handle('player:showSurface', async () => {
+    mpvEmbeddedBackend.showSurface();
+    return { ok: true };
+  });
+  ipcMain.handle('player:hideSurface', async () => {
+    mpvEmbeddedBackend.hideSurface();
+    return { ok: true };
+  });
+
+  // ── Progress ──────────────────────────────────────────────────────────────
   ipcMain.handle('progress:get', async (_event, payload: { animeId: string; episodeIndex: number }) =>
     progressService.getProgress(payload.animeId, payload.episodeIndex)
   );
@@ -236,6 +306,14 @@ app.whenReady().then(async () => {
   await authService.restoreSession().catch(() => undefined);
   registerIpcHandlers();
   createWindow();
+
+  void playerService.checkAvailability().then(result => {
+    if (!result.available) {
+      console.warn('[Player] Startup availability check failed:', result.error ?? 'Unknown player startup failure');
+    }
+  }).catch(error => {
+    console.warn('[Player] Startup availability check crashed:', error);
+  });
 
   const startupProtocolUrl = extractProtocolUrl(process.argv);
   if (startupProtocolUrl) {

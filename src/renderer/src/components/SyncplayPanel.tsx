@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import type { SyncplayParticipantState } from '../types';
+import type { PlaybackTarget, SyncplayParticipantState } from '../types';
 
 type Props = {
   roomCode: string;
@@ -18,9 +18,9 @@ type Props = {
   onTransferHost: (userId: string) => void;
   onRequestSync: () => void;
   onClearError: () => void;
-  playbackTarget: 'html5' | 'mpv';
-  onPlaybackTargetChange: (target: 'html5' | 'mpv') => void;
-  mpvRunning: boolean;
+  playbackTarget: PlaybackTarget;
+  onPlaybackTargetChange: (target: PlaybackTarget) => void;
+  mpvRunning?: boolean;
 };
 
 function formatBuffered(seconds: number): string {
@@ -49,7 +49,6 @@ export function SyncplayPanel(props: Props) {
     onClearError,
     playbackTarget,
     onPlaybackTargetChange,
-    mpvRunning,
   } = props;
 
   const [joinCode, setJoinCode] = useState('');
@@ -69,15 +68,13 @@ export function SyncplayPanel(props: Props) {
       <label className="syncplay-target">
         <span className="muted tiny">Sync target</span>
         <select
-          value={playbackTarget}
-          onChange={e => onPlaybackTargetChange(e.target.value as 'html5' | 'mpv')}
+          value="embedded"
+          onChange={() => onPlaybackTargetChange('embedded')}
+          disabled
         >
-          <option value="html5">Embedded Player (HTML5)</option>
-          <option value="mpv">External MPV</option>
+          <option value="embedded">Embedded MPV (Locked)</option>
         </select>
-        {playbackTarget === 'mpv' ? (
-          <span className="muted tiny">{mpvRunning ? 'MPV running' : 'MPV not running yet'}</span>
-        ) : null}
+        <span className="muted tiny">SyncPlay is locked to embedded MPV in this build.</span>
       </label>
 
       {error ? (

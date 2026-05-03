@@ -37,6 +37,8 @@ export interface StreamTicket {
   message?: string;
 }
 
+export type PlaybackTarget = 'html5' | 'embedded' | 'mpv';
+
 export interface SubtitleTrack {
   id: string;
   label: string;
@@ -65,8 +67,8 @@ export interface PlayerTrack {
 
 export interface AppSettings {
   backendUrl: string;
-  supabaseUrl: string;
-  supabaseAnonKey: string;
+  /** Clerk publishable key — pk_test_... or pk_live_... */
+  clerkPublishableKey: string;
   mpvPath: string;
 }
 

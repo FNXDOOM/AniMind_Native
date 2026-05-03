@@ -11,8 +11,14 @@ const api = {
     session: () => ipcRenderer.invoke('auth:session'),
     signIn: (email: string, password: string) => ipcRenderer.invoke('auth:signin', { email, password }),
     signInWithGoogle: () => ipcRenderer.invoke('auth:google'),
+    signInBrowserBridge: () => ipcRenderer.invoke('auth:signin:browser-bridge'),
     signOut: () => ipcRenderer.invoke('auth:signout'),
     token: () => ipcRenderer.invoke('auth:token'),
+    onSessionChanged: (cb: () => void) => {
+      const listener = () => cb();
+      ipcRenderer.on('auth:session-changed', listener);
+      return () => ipcRenderer.removeListener('auth:session-changed', listener);
+    },
   },
   library: {
     getShows: () => ipcRenderer.invoke('library:shows'),
@@ -34,10 +40,22 @@ const api = {
     getTrackList: () => ipcRenderer.invoke('player:trackList'),
     setAudioTrack: (trackId: number) => ipcRenderer.invoke('player:setAudioTrack', trackId),
     setSubtitleTrack: (trackId: number | 'no') => ipcRenderer.invoke('player:setSubtitleTrack', trackId),
+    addSubtitleFile: (path: string) => ipcRenderer.invoke('player:addSubtitleFile', path),
     setVolume: (volume: number) => ipcRenderer.invoke('player:setVolume', volume),
     setMuted: (muted: boolean) => ipcRenderer.invoke('player:setMuted', muted),
     addSubtitleContent: (episodeId: string, track: { id: string; label: string; language: string; content: string }) =>
       ipcRenderer.invoke('player:addSubtitleContent', { episodeId, track }),
+    // Embedded surface IPC
+    setSurfaceBounds: (bounds: { x: number; y: number; width: number; height: number; coordinateSpace?: 'content' | 'screen' }) =>
+      ipcRenderer.invoke('player:setSurfaceBounds', bounds),
+    showSurface: () => ipcRenderer.invoke('player:showSurface'),
+    hideSurface: () => ipcRenderer.invoke('player:hideSurface'),
+    // Events
+    onStateChanged: (cb: (state: any) => void) => {
+      const listener = (_: any, state: any) => cb(state);
+      ipcRenderer.on('player:stateChanged', listener);
+      return () => ipcRenderer.removeListener('player:stateChanged', listener);
+    },
   },
   progress: {
     get: (animeId: string, episodeIndex: number) => ipcRenderer.invoke('progress:get', { animeId, episodeIndex }),

@@ -10,11 +10,14 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "start": "electron .",
+    "native:install": "npm install --prefix native",
+    "native:build": "npm run build --prefix native",
+    "native:rebuild": "node scripts/rebuild-native.cjs",
     "typecheck": "tsc --noEmit",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.52.0",
     "axios": "^1.11.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -25,8 +28,8 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^5.0.2",
-    "electron": "^37.2.0",
-    "electron-builder": "^25.1.8",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^3.0.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
@@ -45,7 +48,9 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "native/build/Release/**",
+      "vendor/mpv/win-x64/**"
     ],
     "extraMetadata": {
       "main": "dist/main/index.js"

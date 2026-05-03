@@ -44,6 +44,14 @@ function sanitizeMediaTime(value: number): number {
   return Math.max(0, value);
 }
 
+function clampSeekTarget(time: number, duration: number): number {
+  const sanitized = sanitizeMediaTime(time);
+  if (!Number.isFinite(duration) || Number.isNaN(duration) || duration <= 0) {
+    return sanitized;
+  }
+  return Math.max(0, Math.min(duration, sanitized));
+}
+
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
@@ -207,11 +215,15 @@ export function PlayerPage(props: Props) {
   const volumeRef = useRef(85);
   const mutedRef = useRef(false);
   const adjustingVolumeRef = useRef(false);
+  const playbackToggleInFlightRef = useRef(false);
+  const remoteSeekQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const durationRef = useRef(0);
 
   // Keep ref in sync with state so callbacks always read latest value
   useEffect(() => { playbackTargetRef.current = playbackTarget; }, [playbackTarget]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { mutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
 
   useEffect(() => {
     const stopAdjusting = () => {
@@ -252,16 +264,28 @@ export function PlayerPage(props: Props) {
   }, []);
 
   useEffect(() => {
-    let timer: number;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const scheduleNextPoll = (delay: number) => {
+      if (cancelled) return;
+      timer = window.setTimeout(() => {
+        void pollMpv();
+      }, delay);
+    };
+
     const pollMpv = async () => {
+      let nextDelay = 500;
       try {
         const { running } = await desktopApi.isPlayerRunning();
+        if (cancelled) return;
         setMpvRunning(running);
         if (running && playbackTargetRef.current === 'mpv') {
           const [state, audioState] = await Promise.all([
             desktopApi.getPlayerState(),
             desktopApi.getPlayerAudioState().catch(() => ({ volume: volumeRef.current, muted: mutedRef.current })),
           ]);
+          if (cancelled) return;
           setPaused(Boolean(state.paused));
           setTimePos(sanitizeMediaTime(Number(state.timePos ?? 0)));
           setDuration(sanitizeMediaTime(Number(state.duration ?? 0)));
@@ -270,6 +294,7 @@ export function PlayerPage(props: Props) {
             setIsMuted(Boolean(audioState.muted));
           }
           setBufferedUntil(0);
+          nextDelay = state.paused ? 750 : 150;
         } else if (playbackTargetRef.current === 'html5') {
           const video = videoRef.current;
           if (video) {
@@ -277,14 +302,25 @@ export function PlayerPage(props: Props) {
             setTimePos(sanitizeMediaTime(video.currentTime));
             setDuration(sanitizeMediaTime(video.duration));
           }
+          nextDelay = 500;
+        } else {
+          nextDelay = 1000;
         }
       } catch {
-        setMpvRunning(false);
+        if (!cancelled) {
+          setMpvRunning(false);
+        }
+        nextDelay = 1000;
       }
-      timer = window.setTimeout(pollMpv, 250);
+      scheduleNextPoll(nextDelay);
     };
     void pollMpv();
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
   }, []);
 
   const getBufferedAhead = useCallback(() => {
@@ -305,11 +341,28 @@ export function PlayerPage(props: Props) {
   }, []);
 
   const applyRemoteSeek = useCallback((time: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    suppressSyncEmitFor();
-    video.currentTime = Math.max(0, Math.min(video.duration || Number.MAX_SAFE_INTEGER, time));
-  }, [suppressSyncEmitFor]);
+    const task = remoteSeekQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        suppressSyncEmitFor(400);
+        const target = clampSeekTarget(time, durationRef.current);
+
+        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
+          await desktopApi.seek(target);
+          return;
+        }
+
+        const video = videoRef.current;
+        if (!video) return;
+        video.currentTime = clampSeekTarget(target, video.duration);
+      })
+      .catch((err: unknown) => {
+        setPlayerError(getErrorMessage(err, 'Failed to apply SyncPlay seek'));
+      });
+
+    remoteSeekQueueRef.current = task;
+    return task;
+  }, [mpvRunning, suppressSyncEmitFor]);
 
   const syncplay = useSyncplay(
     episode.id,
@@ -343,9 +396,11 @@ export function PlayerPage(props: Props) {
         if (playbackTargetRef.current === 'mpv' && mpvRunning) {
           const delay = Math.max(0, scheduledPlayAt - Date.now());
           window.setTimeout(() => {
-            void desktopApi.seek(time)
+            void applyRemoteSeek(time)
               .then(() => desktopApi.play())
-              .catch(() => undefined);
+              .catch((err: unknown) => {
+                setPlayerError(getErrorMessage(err, 'Remote play failed to start in MPV.'));
+              });
           }, delay);
           return;
         }
@@ -355,11 +410,11 @@ export function PlayerPage(props: Props) {
         applyRemoteSeek(time);
         const delay = Math.max(0, scheduledPlayAt - Date.now());
         window.setTimeout(() => {
-          suppressSyncEmitFor();
-          void video.play().catch((err: unknown) => {
-            if (isBenignPlayInterruption(err)) {
-              return;
-            }
+          void applyRemoteSeek(time).then(() => {
+            suppressSyncEmitFor();
+            return video.play();
+          }).catch((err: unknown) => {
+            if (isBenignPlayInterruption(err)) return;
             setPaused(true);
             setPlayerError(getErrorMessage(err, 'Remote play failed to start in embedded player.'));
           });
@@ -367,35 +422,30 @@ export function PlayerPage(props: Props) {
       },
       onRemotePause: (time) => {
         if (playbackTargetRef.current === 'mpv' && mpvRunning) {
-          void desktopApi.seek(time)
+          void applyRemoteSeek(time)
             .then(() => desktopApi.pause())
-            .catch(() => undefined);
+            .catch((err: unknown) => {
+              setPlayerError(getErrorMessage(err, 'Remote pause failed in MPV.'));
+            });
           return;
         }
 
         const video = videoRef.current;
         if (!video) return;
-        applyRemoteSeek(time);
-        suppressSyncEmitFor();
-        video.pause();
+        void applyRemoteSeek(time).then(() => {
+          suppressSyncEmitFor();
+          video.pause();
+        });
       },
       onRemoteSeek: (time) => {
-        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
-          void desktopApi.seek(time).catch(() => undefined);
-          return;
-        }
-        applyRemoteSeek(time);
+        void applyRemoteSeek(time);
       },
       onSoftCorrect: (time) => {
-        if (playbackTargetRef.current === 'mpv' && mpvRunning) {
-          void desktopApi.seek(time).catch(() => undefined);
-          return;
-        }
-        applyRemoteSeek(time);
+        void applyRemoteSeek(time);
       },
       onSpeedSeek: (rate, duration, targetTime) => {
         if (playbackTargetRef.current === 'mpv' && mpvRunning) {
-          void desktopApi.seek(targetTime).catch(() => undefined);
+          void applyRemoteSeek(targetTime);
           return;
         }
 
@@ -419,8 +469,10 @@ export function PlayerPage(props: Props) {
       onWaitForBufferGoal: (time) => {
         if (playbackTargetRef.current === 'mpv' && mpvRunning) {
           void desktopApi.pause()
-            .then(() => desktopApi.seek(time))
-            .catch(() => undefined);
+            .then(() => applyRemoteSeek(time))
+            .catch((err: unknown) => {
+              setPlayerError(getErrorMessage(err, 'Failed to pause for SyncPlay buffering.'));
+            });
           return;
         }
 
@@ -479,19 +531,25 @@ export function PlayerPage(props: Props) {
     [selectedSubtitleId, subtitles],
   );
 
-  const subtitleUrl = useMemo(() => {
-    if (!selectedSubtitle) return '';
-    const blob = new Blob([normalizeSubtitleContent(selectedSubtitle.content)], { type: 'text/vtt' });
-    return URL.createObjectURL(blob);
-  }, [selectedSubtitle]);
+  const [subtitleUrl, setSubtitleUrl] = useState('');
 
   useEffect(() => {
+    if (!selectedSubtitle) {
+      setSubtitleUrl('');
+      return;
+    }
+
+    const blob = new Blob([normalizeSubtitleContent(selectedSubtitle.content)], { type: 'text/vtt' });
+    const nextUrl = URL.createObjectURL(blob);
+    setSubtitleUrl(nextUrl);
+
     return () => {
-      if (subtitleUrl && subtitleUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(subtitleUrl);
-      }
+      URL.revokeObjectURL(nextUrl);
     };
-  }, [subtitleUrl]);
+  }, [
+    selectedSubtitle?.id,
+    selectedSubtitle?.content,
+  ]);
 
   useEffect(() => {
     playbackTargetRef.current = playbackTarget;
@@ -594,6 +652,10 @@ export function PlayerPage(props: Props) {
     return () => document.removeEventListener('mousedown', onDocumentMouseDown);
   }, [settingsMenuOpen]);
 
+  const stallDebounceMs = useMemo(() => (
+    streamInfo?.hlsRequired ? 1200 : 400
+  ), [streamInfo?.hlsRequired]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamUrl) return;
@@ -667,7 +729,7 @@ export function PlayerPage(props: Props) {
         if (!shouldEmitStall || suppressSyncEmitRef.current) return;
         syncplay.emitBuffering();
         stallSentRef.current = true;
-      }, 700);
+      }, stallDebounceMs);
     };
     const onCanPlay = () => {
       clearStallDebounce();
@@ -739,6 +801,7 @@ export function PlayerPage(props: Props) {
     syncplay.isInRoom,
     syncplay.emitBuffering,
     syncplay.emitStallRecovered,
+    stallDebounceMs,
   ]);
 
   const timePosRef = useRef(0);
@@ -845,12 +908,18 @@ export function PlayerPage(props: Props) {
   }, [isMuted, mpvRunning]);
 
   const togglePlayback = useCallback(() => {
+    if (playbackToggleInFlightRef.current) {
+      return;
+    }
+
     if (playbackTargetRef.current === 'mpv' && mpvRunning) {
       const doToggle = async () => {
+        playbackToggleInFlightRef.current = true;
         try {
           const state = await desktopApi.getPlayerState();
           if (state.paused) {
             await desktopApi.play();
+            setPaused(false);
             if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
               syncplay.emitPlay(state.timePos || 0);
             }
@@ -858,11 +927,14 @@ export function PlayerPage(props: Props) {
           }
 
           await desktopApi.pause();
+          setPaused(true);
           if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
             syncplay.emitPause(state.timePos || 0);
           }
-        } catch {
-          setPlayerError('MPV is not running. Open external player first.');
+        } catch (err: unknown) {
+          setPlayerError(getErrorMessage(err, 'MPV is not running. Open external player first.'));
+        } finally {
+          playbackToggleInFlightRef.current = false;
         }
       };
       void doToggle();
@@ -872,30 +944,35 @@ export function PlayerPage(props: Props) {
     const video = videoRef.current;
     if (!video) return;
 
-    if (video.paused) {
-      setPaused(false);
-      void video.play().catch((err: unknown) => {
+    const doToggle = async () => {
+      playbackToggleInFlightRef.current = true;
+      try {
+        if (video.paused) {
+          await video.play();
+          setPaused(false);
+          if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+            syncplay.emitPlay(video.currentTime || 0);
+          }
+          return;
+        }
+
+        video.pause();
+        setPaused(true);
+        if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
+          syncplay.emitPause(video.currentTime || 0);
+        }
+      } catch (err: unknown) {
         if (isBenignPlayInterruption(err)) {
           return;
         }
         setPaused(true);
         setPlayerError(getErrorMessage(err, 'Failed to start playback'));
-      });
-      // Emit AFTER triggering play so currentTime is accurate
-      if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
-        window.setTimeout(() => {
-          if (videoRef.current && syncplay.isInRoom && !suppressSyncEmitRef.current) {
-            syncplay.emitPlay(videoRef.current.currentTime || 0);
-          }
-        }, 0);
+      } finally {
+        playbackToggleInFlightRef.current = false;
       }
-      return;
-    }
+    };
 
-    if (syncplay.isInRoom && !suppressSyncEmitRef.current) {
-      syncplay.emitPause(video.currentTime || 0);
-    }
-    video.pause();
+    void doToggle();
   }, [mpvRunning, syncplay.isInRoom, syncplay.emitPlay, syncplay.emitPause]);
 
   const seekBy = useCallback((delta: number) => {
@@ -1199,7 +1276,7 @@ export function PlayerPage(props: Props) {
                       onRequestSync={syncplay.requestSync}
                       onClearError={syncplay.clearError}
                       playbackTarget={playbackTarget}
-                      onPlaybackTargetChange={setPlaybackTarget}
+                      onPlaybackTargetChange={(target) => setPlaybackTarget(target === 'embedded' ? 'mpv' : target)}
                       mpvRunning={mpvRunning}
                     />
                   </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { desktopApi } from '../api';
 import type { Show, ShowDetails } from '../types';
 
@@ -40,9 +40,11 @@ export function useLibrary() {
     setError('');
   }, []);
 
-  useEffect(() => {
-    void loadShows();
-  }, [loadShows]);
+  const clearShows = useCallback(() => {
+    setShows([]);
+    setSelectedShow(null);
+    setError('');
+  }, []);
 
   return {
     shows,
@@ -53,5 +55,6 @@ export function useLibrary() {
     loadShows,
     loadShowDetails,
     clearSelectedShow,
+    clearShows,
   };
 }
