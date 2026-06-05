@@ -1,69 +1,27 @@
 {
   "name": "animind-desktop-player",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "type": "module",
-  "description": "Animind native desktop player",
-  "main": "dist/main/index.js",
+  "description": "Animind native desktop player (Qt/QML + libmpv)",
   "author": "Animind",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
-    "start": "electron .",
-    "native:install": "npm install --prefix native",
-    "native:build": "npm run build --prefix native",
-    "native:rebuild": "node scripts/rebuild-native.cjs",
-    "typecheck": "tsc --noEmit",
-    "dist": "npm run build && electron-builder"
+    "configure": "cmake -S qt_host -B qt_host/build -DCMAKE_PREFIX_PATH=\"%CD%/qt_host/.qt/6.5.3/msvc2019_64\" -A x64",
+    "build": "cmake --build qt_host/build --config Release",
+    "dev": "npm run build && npm run start",
+    "start": "qt_host\\build\\Release\\AnimindQtHost.exe",
+    "install:qt": "python -m aqt install-qt windows desktop 6.5.3 win64_msvc2019_64 -O qt_host/.qt",
+    "clean:build": "Remove-Item -Recurse -Force qt_host/build -ErrorAction SilentlyContinue",
+    "test": "jest"
   },
-  "dependencies": {
-    "axios": "^1.11.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "socket.io-client": "^4.8.3"
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/qt_host/tests/**/*.test.js"
+    ],
+    "transform": {}
   },
   "devDependencies": {
-    "@types/node": "^22.15.30",
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^5.0.2",
-    "electron": "^41.3.0",
-    "electron-builder": "^26.8.1",
-    "electron-vite": "^3.0.0",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5"
-  },
-  "build": {
-    "appId": "com.animind.desktop",
-    "productName": "Animind Desktop",
-    "directories": {
-      "output": "release"
-    },
-    "protocols": {
-      "name": "Animind Deep Link",
-      "schemes": [
-        "animind"
-      ]
-    },
-    "files": [
-      "dist/**/*",
-      "package.json",
-      "native/build/Release/**",
-      "vendor/mpv/win-x64/**"
-    ],
-    "extraMetadata": {
-      "main": "dist/main/index.js"
-    },
-    "win": {
-      "target": "nsis",
-      "signAndEditExecutable": false
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
+    "fast-check": "^4.8.0",
+    "jest": "^29.7.0"
   }
 }
