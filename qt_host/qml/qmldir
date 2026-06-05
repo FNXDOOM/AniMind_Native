@@ -1,0 +1,7 @@
+singleton AniListApi 1.0 AniListApi.qml
+
+AnimePosterCard 1.0 AnimePosterCard.qml
+EpisodeThumbnailCard 1.0 EpisodeThumbnailCard.qml
+HorizontalScrollRow 1.0 HorizontalScrollRow.qml
+SideNav 1.0 SideNav.qml
+TopBar 1.0 TopBar.qml

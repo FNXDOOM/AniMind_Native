@@ -1,0 +1,46 @@
+# Qt SDK (installed by aqt, too large to commit)
+qt_host/.qt/
+
+# CMake build output
+qt_host/build/
+
+# libmpv generated files
+vendor/mpv/win-x64/libmpv-2-proper.lib
+vendor/mpv/win-x64/libmpv-2-proper.exp
+vendor/mpv/win-x64/libmpv-2-generated.def
+vendor/mpv/win-x64/libmpv-2-exports.txt
+
+# Runtime logs
+*.log
+
+# Environment secrets
+.env
+
+# Editor
+.vscode/
+.kiro/
+
+# Old/archived files
+_archived/
+
+# Graphify analysis output
+graphify-out/
+.graphifyignore
+
+# Automation scripts
+*.bat
+run_workflow.py
+
+# Node modules
+node_modules/
+
+# CEF host (work in progress, not part of this feature)
+cef_host/
+
+# Vendor import libs and large binaries (binary, generated)
+vendor/mpv/win-x64/libmpv-2.def
+vendor/mpv/win-x64/libmpv-2.exp
+vendor/mpv/win-x64/libmpv-2.lib
+vendor/mpv/win-x64/libmpv-2.dll
+vendor/mpv/win-x64/mpv-1.dll
+vendor/cef/

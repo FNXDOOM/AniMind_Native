@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-04-30T22:39:32.238Z",
+  "pluginSourcePath": "C:\\Users\\gudiy\\Videos\\anims\\animind-desktop-player\\node_modules\\mpv.js\\build\\Release\\mpvjs.node",
+  "pluginTargetPath": "C:\\Users\\gudiy\\Videos\\anims\\animind-desktop-player\\vendor\\mpv\\win-x64\\mpvjs.node",
+  "bundledDll": {
+    "sourcePath": null,
+    "targetPath": "C:\\Users\\gudiy\\Videos\\anims\\animind-desktop-player\\vendor\\mpv\\win-x64\\mpv-1.dll",
+    "compatibilityTargetPath": "C:\\Users\\gudiy\\Videos\\anims\\animind-desktop-player\\vendor\\mpv\\win-x64\\libmpv-2.dll",
+    "sourceManagedByScript": false
+  }
+}
