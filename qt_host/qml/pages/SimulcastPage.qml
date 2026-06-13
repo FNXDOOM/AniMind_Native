@@ -59,10 +59,10 @@ Rectangle {
                             width: Math.floor((showsGrid.width - (showsGrid.columnSpacing * (showsGrid.columns - 1))) / showsGrid.columns)
                             title: modelData.title || "Untitled"
                             rating: (modelData.rating !== undefined && modelData.rating !== null) ? String(modelData.rating) : ""
-                            audioLabel: (modelData.episode_count !== undefined && modelData.episode_count !== null)
-                                ? (String(modelData.episode_count) + " episodes")
-                                : "Simulcast"
-                            newEpisode: false
+                            subtext: "Cloud Library"
+                            epText: (modelData.episode_count !== undefined && modelData.episode_count !== null)
+                                ? ("EP " + String(modelData.episode_count))
+                                : ""
                             posterUrl: modelData.cover_image_url || ""
                             onClicked: showSelected(String(modelData.id || ""), modelData.title || "Untitled")
                         }

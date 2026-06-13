@@ -255,9 +255,10 @@ Item {
                                        || "")
                                     : ""
                         rating:     modelData.averageScore
-                                    ? String(modelData.averageScore)
+                                    ? String(Math.round(modelData.averageScore / 10).toFixed(1))
                                     : ""
-                        audioLabel: "Sub"
+                        subtext:    modelData.seasonYear ? String(modelData.seasonYear) : ""
+                        epText:     modelData.episodes ? "EP " + modelData.episodes : ""
 
                         onClicked: {
                             searchOverlay.seriesSelected(modelData.id)

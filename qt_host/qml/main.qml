@@ -41,7 +41,8 @@ ApplicationWindow {
     property bool sideNavExpanded: true
     property bool notifPanelOpen: false
 
-    // ── Search overlay state ──────────────────────────────────────────────
+    // ── Search page state (no longer an overlay — navigated as a page) ────
+    // searchOverlayOpen kept for Escape-key compat; always false now.
     property bool searchOverlayOpen: false
 
     // ── Player state ──────────────────────────────────────────────────────
@@ -332,7 +333,7 @@ ApplicationWindow {
         z: 11
         currentPage:  root.currentPage
         onNavLinkClicked: (page) => root.currentPage = page
-        onSearchClicked:  root.searchOverlayOpen = true
+        onSearchClicked:  root.currentPage = "search"
         onProfileClicked: {}
         onNotificationsClicked: root.notifPanelOpen = !root.notifPanelOpen
     }
@@ -538,6 +539,20 @@ ApplicationWindow {
             active: root.currentPage === "settings"
             // source: "pages/SettingsPage.qml"
             sourceComponent: PlaceholderPage { pageTitle: "Settings" }
+        }
+        Loader {
+            id: searchLoader
+            anchors.fill: parent
+            active: root.currentPage === "search"
+            source: active ? "pages/SearchPage.qml" : ""
+            onLoaded: {
+                if (!item || !item.seriesClicked) return
+                item.seriesClicked.connect(function(anilistId) {
+                    root.currentSeriesId = anilistId
+                    root.previousPage = root.currentPage
+                    root.currentPage = "detail"
+                })
+            }
         }
 
     }
@@ -1099,25 +1114,9 @@ ApplicationWindow {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // SEARCH OVERLAY  (z: 50 — above all pages and nav chrome)
+    // SEARCH PAGE is now loaded via pageCanvas/searchLoader (see above).
+    // The old SearchOverlay modal is no longer used.
     // ─────────────────────────────────────────────────────────────────────
-    SearchOverlay {
-        id: searchOverlayItem
-        anchors.fill: parent
-        z: 50
-        visible: root.searchOverlayOpen
-        open: root.searchOverlayOpen
-        onCloseRequested: {
-            root.searchOverlayOpen = false
-            searchOverlayItem.searchQuery = ""
-        }
-        onSeriesSelected: function(id) {
-            root.currentSeriesId = id
-            root.previousPage = root.currentPage
-            root.currentPage = "detail"
-            root.searchOverlayOpen = false
-        }
-    }
 
     // ─────────────────────────────────────────────────────────────────────
     // NON-PLAYER ESCAPE KEY HANDLER
@@ -1131,8 +1130,6 @@ ApplicationWindow {
         onActivated: {
             if (root.notifPanelOpen) {
                 root.notifPanelOpen = false
-            } else if (root.searchOverlayOpen) {
-                root.searchOverlayOpen = false
             }
         }
     }

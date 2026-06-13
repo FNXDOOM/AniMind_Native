@@ -335,7 +335,8 @@ Item {
                         posterUrl:  modelData.coverImage  || modelData.poster_url  || ""
                         title:      modelData.title        || ""
                         rating:     modelData.rating ? String(modelData.rating) : ""
-                        audioLabel: modelData.audioLabel   || "Sub"
+                        subtext:    "My List"
+                        epText:     ""
 
                         onClicked: myListPage.seriesSelected(modelData.id)
                     }

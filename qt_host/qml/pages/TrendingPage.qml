@@ -76,8 +76,8 @@ Rectangle {
                         width: Math.floor((trendGrid.width - (trendGrid.columnSpacing * (trendGrid.columns - 1))) / trendGrid.columns)
                         title: AniListApi.title(modelData)
                         rating: AniListApi.score(modelData)
-                        audioLabel: AniListApi.audioLabel(modelData)
-                        newEpisode: AniListApi.isNewEpisode(modelData)
+                        subtext: (AniListApi.studio(modelData) ? AniListApi.studio(modelData) + " · " : "") + (modelData.seasonYear || "")
+                        epText: AniListApi.isNewEpisode(modelData) ? "NEW EP" : (modelData.episodes ? "EP " + modelData.episodes : "")
                         posterUrl: AniListApi.cover(modelData)
                         onClicked: seriesClicked(modelData.id)
                     }
