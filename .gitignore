@@ -44,3 +44,7 @@ vendor/mpv/win-x64/libmpv-2.lib
 vendor/mpv/win-x64/libmpv-2.dll
 vendor/mpv/win-x64/mpv-1.dll
 vendor/cef/
+
+# Design and Installer
+Anime streaming design/
+installer.iss
