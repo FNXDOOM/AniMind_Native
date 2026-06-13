@@ -15,16 +15,16 @@ ApplicationWindow {
     minimumHeight: 520
     visible: true
     title: "Animind Player"
-    color: "#131313"
+    color: "#0a0a0f"
 
     Material.theme: Material.Dark
 
     // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color accentOrange: "#ff6b00"
+    readonly property color accentOrange: "#f47521"
     readonly property color accentPurple: "#6f00be"
-    readonly property color clrPrimary:   "#ffb693"
-    readonly property color clrMuted:     "#e2bfb0"
-    readonly property color clrOnSurface: "#e5e2e1"
+    readonly property color clrPrimary:   "#f47521"
+    readonly property color clrMuted:     "#8888a0"
+    readonly property color clrOnSurface: "#f0f0f5"
     readonly property string iconFont:    "Inter"
     readonly property string bodyFont:    "Inter"
     readonly property string displayFont: "Montserrat"
@@ -325,61 +325,16 @@ ApplicationWindow {
     // NAV SHELL
     // ─────────────────────────────────────────────────────────────────────
 
-    SideNav {
-        id: sideNav
-        anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-        visible: !root.inPlayer
-        width: root.sideNavExpanded ? root.sideNavW : 0
-        clip: true
-        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-        z: 10
-        currentPage: root.currentPage === "trending"
-                     ? "home"
-                     : (root.currentPage === "simulcast" ? "browse" : root.currentPage)
-        onNavigate: (page) => root.currentPage = page
-    }
-
     TopBar {
         id: topBar
         anchors { top: parent.top; left: parent.left; right: parent.right }
         visible: !root.inPlayer
         z: 11
-        sideNavWidth: root.sideNavExpanded ? root.sideNavW : 0
         currentPage:  root.currentPage
         onNavLinkClicked: (page) => root.currentPage = page
         onSearchClicked:  root.searchOverlayOpen = true
         onProfileClicked: {}
         onNotificationsClicked: root.notifPanelOpen = !root.notifPanelOpen
-    }
-
-    Rectangle {
-        id: sideToggle
-        width: 42
-        height: 42
-        radius: 8
-        color: Qt.rgba(0.07, 0.07, 0.07, 0.95)
-        border.color: Qt.rgba(1, 1, 1, 0.10)
-        border.width: 1
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.leftMargin: 12
-        anchors.topMargin: 10
-        z: 20
-        visible: !root.inPlayer
-
-        Text {
-            anchors.centerIn: parent
-            text: "\u2630"
-            color: "#f0f0f0"
-            font.pixelSize: 24
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.sideNavExpanded = !root.sideNavExpanded
-        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -424,7 +379,7 @@ ApplicationWindow {
         id: pageCanvas
         anchors {
             top:    topBar.bottom
-            left:   sideNav.right
+            left:   parent.left
             right:  parent.right
             bottom: parent.bottom
         }

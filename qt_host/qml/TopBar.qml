@@ -2,42 +2,26 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
-import QtQuick.Effects
 
-// TopBar — fixed 64px glassmorphic top bar
-// Usage:
-//   TopBar {
-//       sideNavWidth: 256          // set to 0 if sidebar is hidden
-//       currentPage:  root.currentPage
-//       onSearchClicked:     { ... }
-//       onProfileClicked:    { ... }
-//   }
-
+// TopBar — fixed 64px glassmorphic top bar matching React UI
 Item {
     id: topBar
 
-    // ── Public API ────────────────────────────────────────────────────────
-    property int    sideNavWidth:  256
-    property string currentPage:   "home"
-    property string searchQuery:   ""
+    property string currentPage: "home"
 
     signal searchClicked()
     signal notificationsClicked()
     signal profileClicked()
     signal navLinkClicked(string page)
 
-    // Position of the notification icon centre, mapped to root/window coordinates.
-    // Use this in main.qml to right-align NotificationPanel to the icon.
     readonly property point notifIconCenter: notifIcon.visible
         ? notifIcon.mapToItem(null, notifIcon.width / 2, notifIcon.height / 2)
         : Qt.point(0, 0)
 
-    // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color clrSurface:   "#131313"
-    readonly property color clrPrimary:   "#ffb693"
-    readonly property color clrMuted:     "#e2bfb0"
-    readonly property color clrOnSurface: "#e5e2e1"
-    readonly property color clrBorder:    "#1c1b1b"
+    readonly property color clrSurface:   "#0a0a0f"
+    readonly property color clrPrimary:   "#f47521"
+    readonly property color clrMuted:     "#8888a0"
+    readonly property color clrOnSurface: "#f0f0f5"
 
     height: 64
 
@@ -45,84 +29,120 @@ Item {
     Rectangle {
         id: barBg
         anchors.fill: parent
-        color: Qt.rgba(0.075, 0.075, 0.075, 0.82)
+        gradient: Gradient {
+            orientation: Gradient.Vertical
+            GradientStop { position: 0.0; color: Qt.rgba(0.039, 0.039, 0.059, 0.98) }
+            GradientStop { position: 1.0; color: Qt.rgba(0.039, 0.039, 0.059, 0.92) }
+        }
 
         // Bottom border line
         Rectangle {
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
             height: 1
-            color: Qt.rgba(1, 1, 1, 0.06)
+            color: Qt.rgba(1, 1, 1, 0.07)
         }
-    }
-
-    MultiEffect {
-        source: barBg
-        anchors.fill: barBg
-        blurEnabled: true
-        blur: 1.0
-        blurMax: 28
-        z: -1
     }
 
     // ── Content ───────────────────────────────────────────────────────────
     RowLayout {
-        // Inset by sideNavWidth so content starts where sidebar ends
-        anchors {
-            fill: parent
-            leftMargin: topBar.sideNavWidth + 24
-            rightMargin: 24
-        }
+        anchors { fill: parent; leftMargin: 24; rightMargin: 24 }
         spacing: 32
 
-        // Centre nav links (Browse / Trending / Simulcasts)
+        // ── Logo ─────────────────────────────────────────────────────────
         Row {
-            spacing: 28
+            spacing: 8
+            Layout.alignment: Qt.AlignVCenter
+
+            Rectangle {
+                width: 32; height: 32
+                radius: 8
+                color: topBar.clrPrimary
+
+                Text {
+                    anchors.centerIn: parent
+                    anchors.horizontalCenterOffset: 1
+                    text: "\u25B6" // Play icon
+                    color: "white"
+                    font.pixelSize: 16
+                }
+            }
+
+            Text {
+                text: "ANISTREAM"
+                color: topBar.clrPrimary
+                font { family: "Montserrat"; pixelSize: 22; weight: Font.Bold; letterSpacing: 1.1 }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: topBar.navLinkClicked("home")
+            }
+        }
+
+        Item { width: 16 } // Spacing
+
+        // ── Centre Nav Links ─────────────────────────────────────────────
+        Row {
+            spacing: 4
+            Layout.alignment: Qt.AlignVCenter
 
             Repeater {
                 model: [
-                    { page: "browse",    label: "Browse"     },
-                    { page: "trending",  label: "Trending"   },
-                    { page: "simulcast", label: "Simulcasts" }
+                    { id: "home",      label: "Home",     icon: "\u2302" },
+                    { id: "search",    label: "Search",   icon: "\u2315" },
+                    { id: "trending",  label: "Trending", icon: "\u2197" },
+                    { id: "simulcast", label: "My Shows", icon: "\uD83D\uDCFA" },
+                    { id: "mylist",    label: "My Lists", icon: "\u2630" }
                 ]
 
                 delegate: Item {
-                    height: topBar.height
-                    width: lbl.implicitWidth + 4
+                    width: navRow.implicitWidth + 32
+                    height: 40
 
-                    Text {
-                        id: lbl
-                        anchors.centerIn: parent
-                        text: modelData.label
-                        color: topBar.currentPage === modelData.page
-                               ? topBar.clrPrimary
-                               : topBar.clrMuted
-                        font {
-                            family: "Inter"
-                            pixelSize: 13
-                            weight: topBar.currentPage === modelData.page ? Font.DemiBold : Font.Normal
-                            letterSpacing: 0.7
-                        }
-                        Behavior on color { ColorAnimation { duration: 180 } }
+                    property bool isActive: modelData.id !== "search" && topBar.currentPage === modelData.id
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: isActive ? Qt.rgba(0.95, 0.46, 0.13, 0.1) : (navMa.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
+                        border.color: isActive ? Qt.rgba(0.95, 0.46, 0.13, 0.2) : "transparent"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 200 } }
                     }
 
-                    // Active underline
-                    Rectangle {
-                        visible: topBar.currentPage === modelData.page
-                        anchors { bottom: parent.bottom; bottomMargin: 0; horizontalCenter: parent.horizontalCenter }
-                        width: lbl.implicitWidth
-                        height: 2
-                        radius: 1
-                        color: topBar.clrPrimary
+                    Row {
+                        id: navRow
+                        anchors.centerIn: parent
+                        spacing: 8
+                        
+                        Text {
+                            text: modelData.icon
+                            color: isActive ? topBar.clrPrimary : topBar.clrMuted
+                            font { family: "Inter"; pixelSize: 16 }
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: modelData.label
+                            color: isActive ? topBar.clrPrimary : topBar.clrMuted
+                            font { family: "Inter"; pixelSize: 14; weight: Font.Medium }
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
 
                     MouseArea {
+                        id: navMa
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: topBar.navLinkClicked(modelData.page)
-                        onEntered: lbl.color = topBar.clrPrimary
-                        onExited:  lbl.color = topBar.currentPage === modelData.page
-                                               ? topBar.clrPrimary : topBar.clrMuted
+                        onClicked: {
+                            if (modelData.id === "search") {
+                                topBar.searchClicked()
+                            } else {
+                                topBar.navLinkClicked(modelData.id)
+                            }
+                        }
                     }
                 }
             }
@@ -130,103 +150,128 @@ Item {
 
         Item { Layout.fillWidth: true }   // pushes icons to the right
 
-        // ── Right-side icon buttons ───────────────────────────────────────
+        // ── Right Side ───────────────────────────────────────────────────
         Row {
-            spacing: 8
-
-            // Search
-            TopBarIcon {
-                glyph: "\u2315"
-                tip: "Search"
-                clrMuted: topBar.clrMuted
-                clrPrimary: topBar.clrPrimary
-                onClicked: topBar.searchClicked()
-            }
+            spacing: 16
+            Layout.alignment: Qt.AlignVCenter
 
             // Notifications
-            TopBarIcon {
-                id: notifIcon
-                glyph: "\uD83D\uDD14"
-                tip: "Notifications"
-                clrMuted: topBar.clrMuted
-                clrPrimary: topBar.clrPrimary
-                onClicked: topBar.notificationsClicked()
-            }
-
-            // Profile avatar
             Item {
+                id: notifIcon
                 width: 36; height: 36
                 anchors.verticalCenter: parent.verticalCenter
 
                 Rectangle {
                     anchors.fill: parent
                     radius: 18
-                    color: "#353534"
-                    border.color: Qt.rgba(1, 0.714, 0.576, 0.25)
-                    border.width: 1.5
+                    color: notifMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: {
-                            if (!authManager || !authManager.authenticated) return "?"
-                            var dn = root.computeDisplayName(
-                                authManager.email, authManager.userId, authManager.authenticated)
-                            if (dn === "Guest" || dn === "User") return "?"
-                            return dn.charAt(0).toUpperCase()
-                        }
-                        color: topBar.clrPrimary
-                        font { pixelSize: 15; weight: Font.Bold }
-                    }
+                Text {
+                    anchors.centerIn: parent
+                    text: "\uD83D\uDD14"
+                    color: notifMa.containsMouse ? topBar.clrPrimary : topBar.clrMuted
+                    font { family: "Inter"; pixelSize: 19 }
+                    Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
                 MouseArea {
+                    id: notifMa
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: topBar.profileClicked()
+                    onClicked: topBar.notificationsClicked()
                 }
+            }
+
+            // Profile / Sign In
+            Loader {
+                anchors.verticalCenter: parent.verticalCenter
+                active: true
+                sourceComponent: (authManager && authManager.authenticated) ? profileAvatar : signInBtn
             }
         }
     }
 
-    // ── TopBarIcon inline component ───────────────────────────────────────
-    component TopBarIcon: Item {
-        id: tbi
-        width: 36; height: 36
-        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+    Component {
+        id: profileAvatar
+        Item {
+            width: 36; height: 36
 
-        property string glyph: ""
-        property string tip:   ""
-        property color clrMuted:   "#e2bfb0"
-        property color clrPrimary: "#ffb693"
+            Rectangle {
+                anchors.fill: parent
+                radius: 18
+                color: "#353534"
+                border.color: Qt.rgba(0.95, 0.46, 0.13, 0.25)
+                border.width: 1.5
 
-        signal clicked()
+                Text {
+                    anchors.centerIn: parent
+                    text: {
+                        // Inline display name logic — avoids cross-file root reference
+                        if (!authManager || !authManager.authenticated) return "?"
+                        var em = authManager.email || ""
+                        if (em.indexOf("@") !== -1) {
+                            var local = em.substring(0, em.indexOf("@"))
+                            if (local.length > 0) return local.charAt(0).toUpperCase()
+                        }
+                        var uid = authManager.userId || ""
+                        if (uid.length > 0) {
+                            var s = uid.startsWith("user_") ? uid.substring(5) : uid
+                            return s.charAt(0).toUpperCase()
+                        }
+                        return "U"
+                    }
+                    color: topBar.clrPrimary
+                    font { pixelSize: 15; weight: Font.Bold }
+                }
+            }
 
+            MouseArea {
+                id: profMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: { if (authManager) authManager.signOut() }
+            }
+
+            ToolTip {
+                visible: profMa.containsMouse
+                text: "Sign Out"
+                delay: 500
+            }
+        }
+    }
+
+    Component {
+        id: signInBtn
         Rectangle {
-            anchors.fill: parent
-            radius: 18
-            color: tbiMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
-            Behavior on color { ColorAnimation { duration: 120 } }
-        }
+            width: btnText.implicitWidth + 32; height: 36
+            radius: 8
+            color: btnMa.containsMouse ? Qt.rgba(0.95, 0.46, 0.13, 0.2) : Qt.rgba(0.95, 0.46, 0.13, 0.1)
+            border.color: Qt.rgba(0.95, 0.46, 0.13, 0.3)
+            border.width: 1
+            Behavior on color { ColorAnimation { duration: 150 } }
 
-        Text {
-            anchors.centerIn: parent
-            text: tbi.glyph
-            color: tbiMa.containsMouse ? tbi.clrPrimary : tbi.clrMuted
-            font { family: "Inter"; pixelSize: 19; weight: Font.DemiBold }
-            Behavior on color { ColorAnimation { duration: 120 } }
-        }
+            Text {
+                id: btnText
+                anchors.centerIn: parent
+                text: (authManager && authManager.signingIn) ? "Signing In..." : "Sign In"
+                color: topBar.clrPrimary
+                font { family: "Inter"; pixelSize: 14; weight: Font.DemiBold }
+            }
 
-        MouseArea {
-            id: tbiMa
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: tbi.clicked()
+            MouseArea {
+                id: btnMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                enabled: !(authManager && authManager.signingIn)
+                onClicked: {
+                    if (authManager) authManager.signInWithBrowserBridge()
+                }
+            }
         }
-
-        ToolTip.text: tbi.tip
-        ToolTip.visible: tbiMa.containsMouse
-        ToolTip.delay: 500
     }
 }

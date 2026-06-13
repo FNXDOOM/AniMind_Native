@@ -4,192 +4,374 @@ import QtQuick.Layouts
 import "../"
 
 Rectangle {
-    color: "#0a0a0a"
-    
-    property var trendingList: []
-    property var heroMedia: null
-    property bool loadingHero: false
-    property bool loadingAiring: false
-    property var airingList: []
-    property string errorMsg: ""
-    property int lm: 32
-    
+    id: homePage
+    color: "#0a0a0f"
+
+    property var  trendingList: []
+    property var  heroMedia:    null
+    property bool loadingHero:  false
+    property string errorMsg:   ""
+
     signal playRequested(int id, string title)
     signal addToListRequested(int id)
     signal seriesClicked(int id)
 
     function loadTrendingIfNeeded() {
-        if (trendingList.length > 0 || loadingHero)
-            return
-
+        if (trendingList.length > 0 || loadingHero) return
         loadingHero = true
         errorMsg = ""
-        AniListApi.trendingAnime(10, function(list, err) {
+        AniListApi.trendingAnime(12, function(list, err) {
+            loadingHero = false
             if (err) {
-                errorMsg = "Failed to load trending: " + err
-                loadingHero = false
+                errorMsg = "Could not load trending: " + err
             } else if (list && list.length > 0) {
                 trendingList = list
                 heroMedia = list[0]
-                loadingHero = false
             } else {
                 errorMsg = "No trending data returned"
-                loadingHero = false
             }
         })
     }
-    
-    // Load trending data on page activation
-    onVisibleChanged: {
-        if (visible)
-            loadTrendingIfNeeded()
-    }
 
+    onVisibleChanged: { if (visible) loadTrendingIfNeeded() }
     Component.onCompleted: loadTrendingIfNeeded()
-    
+
     Flickable {
+        id: flick
         anchors.fill: parent
-        contentHeight: col.implicitHeight
+        contentWidth: homePage.width
+        contentHeight: pageCol.implicitHeight + 32
         clip: true
-        
+        boundsBehavior: Flickable.StopAtBounds
+        flickDeceleration: 3500
+
         Column {
-            id: col
-            width: parent.width
-            spacing: 24
-            topPadding: 16
-            bottomPadding: 32
-            
-            // Error message display
-            Rectangle {
-                visible: errorMsg !== ""
-                width: parent.width - 64
-                height: errorMsgText.implicitHeight + 16
-                color: Qt.rgba(1, 0.2, 0.2, 0.3)
-                radius: 8
-                anchors.horizontalCenter: parent.horizontalCenter
-                
-                Text {
-                    id: errorMsgText
-                    text: errorMsg
-                    color: "#ff6b6b"
-                    width: parent.width - 16
-                    wrapMode: Text.Wrap
-                    anchors.centerIn: parent
-                    font.pixelSize: 12
-                }
-            }
-            
-            // Trending/Hero section
+            id: pageCol
+            x: 0; y: 0
+            width: homePage.width
+            spacing: 0
+
+            // ── Error banner ─────────────────────────────────────────────────
             Item {
                 width: parent.width
-                height: loadingHero ? 300 : (heroMedia ? 400 : 100)
-                visible: loadingHero || heroMedia !== null
-                
+                height: errorMsg !== "" ? (eTxt.implicitHeight + 24) : 0
+                visible: errorMsg !== ""
                 Rectangle {
                     anchors.fill: parent
-                    color: "#1a1a1a"
+                    color: Qt.rgba(1, 0.2, 0.2, 0.25)
                     radius: 8
-                    clip: true
-
-                    Image {
-                        anchors.fill: parent
-                        source: heroMedia && heroMedia.bannerImage ? heroMedia.bannerImage
-                               : (heroMedia ? AniListApi.cover(heroMedia) : "")
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        opacity: 0.35
+                    anchors.margins: 32
+                    Text {
+                        id: eTxt
+                        text: errorMsg; color: "#ff6b6b"; wrapMode: Text.Wrap
+                        font.pixelSize: 13
+                        width: parent.width - 32
+                        anchors.centerIn: parent
                     }
+                }
+            }
 
-                    Rectangle {
-                        anchors.fill: parent
-                        gradient: Gradient {
-                            orientation: Gradient.Vertical
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.35) }
-                            GradientStop { position: 0.7; color: Qt.rgba(0, 0, 0, 0.70) }
-                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.85) }
-                        }
+            // ── Hero section ─────────────────────────────────────────────────
+            Item {
+                id: hero
+                width: parent.width
+                height: 500
+
+                // Always-visible dark bg (no rotation ever applied here)
+                Rectangle { anchors.fill: parent; color: "#0d0d18" }
+
+                // Pulsing loading ring (opacity only — NO RotationAnimator)
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 48; height: 48; radius: 24
+                    color: "transparent"
+                    border.color: "#f47521"; border.width: 2
+                    visible: loadingHero && heroMedia === null
+                    SequentialAnimation on opacity {
+                        running: parent.visible
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.25; duration: 500; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1.0;  duration: 500; easing.type: Easing.InOutSine }
                     }
-                    
+                }
+
+                // Banner image (shown once loaded)
+                Image {
+                    anchors.fill: parent
+                    source: heroMedia
+                            ? (heroMedia.bannerImage && heroMedia.bannerImage !== ""
+                               ? heroMedia.bannerImage
+                               : AniListApi.cover(heroMedia))
+                            : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    visible: status === Image.Ready
+                }
+
+                // Left-to-right dark gradient
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.00; color: Qt.rgba(0.039, 0.039, 0.059, 0.97) }
+                        GradientStop { position: 0.42; color: Qt.rgba(0.039, 0.039, 0.059, 0.60) }
+                        GradientStop { position: 1.00; color: Qt.rgba(0.039, 0.039, 0.059, 0.10) }
+                    }
+                }
+
+                // Bottom fade
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        orientation: Gradient.Vertical
+                        GradientStop { position: 0.00; color: "transparent" }
+                        GradientStop { position: 0.55; color: "transparent" }
+                        GradientStop { position: 1.00; color: "#0a0a0f" }
+                    }
+                }
+
+                // Hero text block
+                Item {
+                    id: heroText
+                    visible: heroMedia !== null
+                    x: 48
+                    width: Math.min(hero.width * 0.50, 560)
+                    height: heroCol.implicitHeight
+                    y: hero.height - heroCol.implicitHeight - 52
+
                     Column {
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        spacing: 12
-                        
-                        Text {
-                            text: loadingHero ? "Loading..." : (heroMedia ? AniListApi.title(heroMedia) : "No media")
-                            color: "white"
-                            font.pixelSize: 40
-                            font.bold: true
+                        id: heroCol
+                        width: parent.width
+                        spacing: 10
+
+                        // Genre tags
+                        Row {
+                            spacing: 8
+                            Repeater {
+                                model: heroMedia && heroMedia.genres
+                                       ? Math.min(heroMedia.genres.length, 3)
+                                       : 0
+                                delegate: Rectangle {
+                                    height: 22; radius: 4
+                                    width: _gt.implicitWidth + 16
+                                    color: Qt.rgba(0.95, 0.46, 0.13, 0.15)
+                                    border.color: Qt.rgba(0.95, 0.46, 0.13, 0.30)
+                                    border.width: 1
+                                    Text {
+                                        id: _gt
+                                        anchors.centerIn: parent
+                                        text: heroMedia.genres[index]
+                                        color: "#f47521"
+                                        font.family: "Inter"
+                                        font.pixelSize: 11
+                                        font.weight: Font.Medium
+                                    }
+                                }
+                            }
                         }
-                        
+
+                        // Title
                         Text {
-                            text: heroMedia ? ("Score: " + AniListApi.score(heroMedia) + " / 10") : ""
-                            color: "#aaa"
-                            font.pixelSize: 14
+                            width: parent.width
+                            text: heroMedia ? AniListApi.title(heroMedia) : ""
+                            color: "#f0f0f5"
+                            font.family: "Montserrat"
+                            font.pixelSize: 36
+                            font.weight: Font.Bold
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            lineHeight: 1.15
                         }
-                        
+
+                        // Meta: score · studio · year
                         Row {
                             spacing: 12
-                            
-                            Button {
-                                text: "Play"
-                                onClicked: if (heroMedia) playRequested(heroMedia.id, heroMedia.title.romaji)
-                            }
-                            
-                            Button {
-                                text: "Add to List"
-                                onClicked: if (heroMedia) addToListRequested(heroMedia.id)
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Trending list
-            Rectangle {
-                width: parent.width - 64
-                anchors.horizontalCenter: parent.horizontalCenter
-                height: 340
-                color: "#1a1a1a"
-                radius: 8
-                
-                Column {
-                    anchors { fill: parent; margins: 16 }
-                    spacing: 12
-                    
-                    Text {
-                        text: "Trending Anime"
-                        color: "white"
-                        font.pixelSize: 16
-                        font.bold: true
-                    }
-                    
-                    ScrollView {
-                        width: parent.width
-                        height: parent.height - 40
-                        
-                        ListView {
-                            id: trendingCards
-                            width: parent.width
-                            height: parent.height
-                            model: trendingList
-                            orientation: ListView.Horizontal
-                            spacing: 18
-                            clip: true
+                            visible: heroMedia !== null
 
-                            delegate: AnimePosterCard {
-                                width: 170
-                                title: AniListApi.title(modelData)
-                                rating: AniListApi.score(modelData)
-                                audioLabel: AniListApi.audioLabel(modelData)
-                                newEpisode: AniListApi.isNewEpisode(modelData)
-                                posterUrl: AniListApi.cover(modelData)
-                                onClicked: playRequested(modelData.id, AniListApi.title(modelData))
+                            Row {
+                                spacing: 4
+                                visible: heroMedia && AniListApi.score(heroMedia) !== ""
+                                Text { text: "★"; color: "#ffd700"; font.pixelSize: 13 }
+                                Text {
+                                    text: heroMedia ? AniListApi.score(heroMedia) : ""
+                                    color: "#ffd700"
+                                    font.family: "Inter"
+                                    font.pixelSize: 13
+                                    font.weight: Font.Bold
+                                }
+                            }
+                            Text {
+                                visible: heroMedia && AniListApi.studio(heroMedia) !== ""
+                                text: heroMedia ? AniListApi.studio(heroMedia) : ""
+                                color: "#8888a0"
+                                font.family: "Inter"
+                                font.pixelSize: 12
+                            }
+                            Text {
+                                visible: heroMedia && heroMedia.seasonYear
+                                text: heroMedia && heroMedia.seasonYear ? heroMedia.seasonYear.toString() : ""
+                                color: "#8888a0"
+                                font.family: "Inter"
+                                font.pixelSize: 12
+                            }
+                        }
+
+                        // Synopsis
+                        Text {
+                            width: parent.width
+                            text: heroMedia ? AniListApi.cleanDesc(heroMedia) : ""
+                            color: "#a0a0b8"
+                            font.family: "Inter"
+                            font.pixelSize: 13
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            lineHeight: 1.6
+                        }
+
+                        // Buttons
+                        Row {
+                            spacing: 12
+                            topPadding: 4
+
+                            // Watch Now
+                            Rectangle {
+                                width: _wr.implicitWidth + 40
+                                height: 42; radius: 8
+                                color: _wma.pressed ? "#c4601b"
+                                     : _wma.containsMouse ? "#e06b1e" : "#f47521"
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                scale: _wma.pressed ? 0.95 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 100 } }
+
+                                Row {
+                                    id: _wr
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    Text { text: "▶"; color: "white"; font.pixelSize: 13 }
+                                    Text {
+                                        text: "Watch Now"; color: "white"
+                                        font.family: "Inter"
+                                        font.pixelSize: 14
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+                                MouseArea {
+                                    id: _wma
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: if (heroMedia) playRequested(heroMedia.id, AniListApi.title(heroMedia))
+                                }
+                            }
+
+                            // More Info
+                            Rectangle {
+                                width: _ir.implicitWidth + 32
+                                height: 42; radius: 8
+                                color: _ima.pressed ? Qt.rgba(1,1,1,0.15)
+                                     : _ima.containsMouse ? Qt.rgba(1,1,1,0.12)
+                                     : Qt.rgba(1,1,1,0.07)
+                                border.color: Qt.rgba(1,1,1,0.14)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                scale: _ima.pressed ? 0.95 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 100 } }
+
+                                Row {
+                                    id: _ir
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    Text { text: "ℹ"; color: "#f0f0f5"; font.pixelSize: 15 }
+                                    Text {
+                                        text: "More Info"; color: "#f0f0f5"
+                                        font.family: "Inter"
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                    }
+                                }
+                                MouseArea {
+                                    id: _ima
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: if (heroMedia) seriesClicked(heroMedia.id)
+                                }
                             }
                         }
                     }
                 }
+            } // hero
+
+            Item { width: 1; height: 28 }
+
+            // ── Trending Now row ──────────────────────────────────────────────
+            Item {
+                width: parent.width
+                height: trendHeader.implicitHeight + 16 + 290 + 8
+                visible: trendingList.length > 0
+
+                Column {
+                    id: trendHeader
+                    x: 24; y: 0
+                    spacing: 4
+                    Row {
+                        spacing: 10
+                        Text {
+                            text: "Trending Now"
+                            color: "#f0f0f5"
+                            font.family: "Montserrat"
+                            font.pixelSize: 20
+                            font.weight: Font.Bold
+                        }
+                        Rectangle {
+                            width: _hot.implicitWidth + 14; height: 20; radius: 4
+                            color: Qt.rgba(0.95,0.46,0.13,0.15)
+                            border.color: Qt.rgba(0.95,0.46,0.13,0.30); border.width: 1
+                            anchors.verticalCenter: parent.verticalCenter
+                            Text {
+                                id: _hot; anchors.centerIn: parent
+                                text: "HOT"; color: "#f47521"
+                                font.family: "Inter"; font.pixelSize: 10
+                                font.weight: Font.Bold
+                            }
+                        }
+                    }
+                    Text {
+                        text: "Hottest picks this week"
+                        color: "#8888a0"
+                        font.family: "Inter"
+                        font.pixelSize: 13
+                    }
+                }
+
+                ListView {
+                    id: cardList
+                    x: 24
+                    y: trendHeader.implicitHeight + 16
+                    width: parent.width - 48
+                    height: 290
+                    model: trendingList
+                    orientation: ListView.Horizontal
+                    spacing: 16
+                    clip: true
+                    flickDeceleration: 3500
+                    maximumFlickVelocity: 3000
+
+                    delegate: AnimePosterCard {
+                        width: 158
+                        title: AniListApi.title(modelData)
+                        rating: AniListApi.score(modelData)
+                        audioLabel: AniListApi.audioLabel(modelData)
+                        newEpisode: AniListApi.isNewEpisode(modelData)
+                        posterUrl: AniListApi.cover(modelData)
+                        onClicked: seriesClicked(modelData.id)
+                    }
+                }
             }
+
+            Item { width: 1; height: 32 }
         }
     }
 }

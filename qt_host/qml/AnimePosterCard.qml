@@ -70,19 +70,19 @@ Item {
             }
         }
 
-        // Hover glow border — primary/50 + shadow (stitch: shadow-[0_0_20px_rgba(255,182,147,0.2)])
+        // Hover glow border — primary/50 + shadow
         Rectangle {
             anchors.fill: posterClip
             radius: posterClip.radius
             color: "transparent"
-            border.color: Qt.rgba(1, 0.714, 0.576, cardMa.containsMouse ? 0.5 : 0.0)
+            border.color: Qt.rgba(0.95, 0.46, 0.13, cardMa.containsMouse ? 0.5 : 0.0)
             border.width: 2
             Behavior on border.color { ColorAnimation { duration: 220 } }
 
             layer.enabled: cardMa.containsMouse
             layer.effect: MultiEffect {
                 shadowEnabled: true
-                shadowColor:   Qt.rgba(1, 0.714, 0.576, 0.22)
+                shadowColor:   Qt.rgba(0.95, 0.46, 0.13, 0.22)
                 shadowBlur:    0.9
                 shadowHorizontalOffset: 0
                 shadowVerticalOffset:   0
@@ -95,7 +95,7 @@ Item {
             anchors { top: parent.top; left: parent.left; margins: 8 }
             height: 22; radius: 4
             width: newEpTxt.implicitWidth + 12
-            color: "#ff6b00"
+            color: "#f47521"
 
             Text {
                 id: newEpTxt
@@ -121,13 +121,13 @@ Item {
 
                 Text {
                     text: "\u2605"   // ★ filled star
-                    color: "#ffb693"
+                    color: "#f47521"
                     font { pixelSize: 11 }
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
                     text: card.rating
-                    color: "#ffb693"
+                    color: "#f47521"
                     font { family: "Inter"; pixelSize: 11; weight: Font.DemiBold }
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -144,7 +144,7 @@ Item {
         Text {
             width: parent.width
             text: card.title
-            color: cardMa.containsMouse ? "#ffb693" : "#e5e2e1"
+            color: cardMa.containsMouse ? "#f47521" : "#f0f0f5"
             font { family: "Montserrat"; pixelSize: 14; weight: Font.DemiBold }
             elide: Text.ElideRight
             Behavior on color { ColorAnimation { duration: 200 } }
@@ -153,7 +153,7 @@ Item {
         Text {
             width: parent.width
             text: card.audioLabel
-            color: "#e2bfb0"
+            color: "#8888a0"
             font { family: "Inter"; pixelSize: 11 }
         }
     }
