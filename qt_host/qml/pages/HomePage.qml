@@ -54,7 +54,7 @@ Rectangle {
         property bool   showSeeAll:  false
         property var    rowModel:    []
         property string epTextMode:  "auto"   // "auto" | "ongoing"
-        property int    listViewHeight: 290   // poster(~195) + meta(~70) + padding
+        property int    listViewHeight: 360   // posterArea(270) + metaCol(~65) + padding(~25)
 
         width: parent ? parent.width : 0
         spacing: 0
