@@ -8,6 +8,8 @@ Rectangle {
     color: "#0a0a0f"
 
     property var  trendingList: []
+    property var  simulcastList: []
+    property var  airingList:   []
     property var  heroMedia:    null
     property bool loadingHero:  false
     property string errorMsg:   ""
@@ -29,6 +31,16 @@ Rectangle {
                 heroMedia = list[0]
             } else {
                 errorMsg = "No trending data returned"
+            }
+        })
+        AniListApi.seasonalAnime("SPRING", 2024, 12, function(list, err) {
+            if (!err && list && list.length > 0) {
+                simulcastList = list
+            }
+        })
+        AniListApi.airingNow(12, function(list, err) {
+            if (!err && list && list.length > 0) {
+                airingList = list
             }
         })
     }
@@ -304,45 +316,83 @@ Rectangle {
                 }
             } // hero
 
-            Item { width: 1; height: 28 }
+            Item { width: 1; height: 32 }
 
             // ── Trending Now row ──────────────────────────────────────────────
             Item {
                 width: parent.width
-                height: trendHeader.implicitHeight + 16 + 290 + 8
+                height: trendHeader.implicitHeight + 16 + 350
                 visible: trendingList.length > 0
 
-                Column {
+                Item {
                     id: trendHeader
                     x: 24; y: 0
-                    spacing: 4
-                    Row {
-                        spacing: 10
-                        Text {
-                            text: "Trending Now"
-                            color: "#f0f0f5"
-                            font.family: "Montserrat"
-                            font.pixelSize: 20
-                            font.weight: Font.Bold
-                        }
-                        Rectangle {
-                            width: _hot.implicitWidth + 14; height: 20; radius: 4
-                            color: Qt.rgba(0.95,0.46,0.13,0.15)
-                            border.color: Qt.rgba(0.95,0.46,0.13,0.30); border.width: 1
-                            anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 48
+                    height: trendHeaderCol.implicitHeight
+
+                    Column {
+                        id: trendHeaderCol
+                        spacing: 4
+                        Row {
+                            spacing: 10
                             Text {
-                                id: _hot; anchors.centerIn: parent
-                                text: "HOT"; color: "#f47521"
-                                font.family: "Inter"; font.pixelSize: 10
+                                text: "Trending Now"
+                                color: "#f0f0f5"
+                                font.family: "Montserrat"
+                                font.pixelSize: 20
                                 font.weight: Font.Bold
                             }
+                            Rectangle {
+                                width: _hot.implicitWidth + 14; height: 20; radius: 4
+                                color: Qt.rgba(0.95,0.46,0.13,0.15)
+                                border.color: Qt.rgba(0.95,0.46,0.13,0.30); border.width: 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                Text {
+                                    id: _hot; anchors.centerIn: parent
+                                    text: "HOT"; color: "#f47521"
+                                    font.family: "Inter"; font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                            }
+                        }
+                        Text {
+                            text: "Hottest picks this week"
+                            color: "#8888a0"
+                            font.family: "Inter"
+                            font.pixelSize: 13
                         }
                     }
-                    Text {
-                        text: "Hottest picks this week"
-                        color: "#8888a0"
-                        font.family: "Inter"
-                        font.pixelSize: 13
+
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 12
+                        
+                        Text {
+                            text: "See All →"
+                            color: "#f47521"
+                            font.family: "Inter"
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Row {
+                            spacing: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            Rectangle {
+                                width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                                Text { text: "<"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: cardList.contentX = Math.max(0, cardList.contentX - 320) }
+                            }
+                            Rectangle {
+                                width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                                Text { text: ">"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: cardList.contentX = Math.min(cardList.contentWidth - cardList.width, cardList.contentX + 320) }
+                            }
+                        }
                     }
                 }
 
@@ -351,7 +401,7 @@ Rectangle {
                     x: 24
                     y: trendHeader.implicitHeight + 16
                     width: parent.width - 48
-                    height: 290
+                    height: 350
                     model: trendingList
                     orientation: ListView.Horizontal
                     spacing: 16
@@ -360,11 +410,11 @@ Rectangle {
                     maximumFlickVelocity: 3000
 
                     delegate: AnimePosterCard {
-                        width: 158
+                        width: 180
                         title: AniListApi.title(modelData)
                         rating: AniListApi.score(modelData)
-                        audioLabel: AniListApi.audioLabel(modelData)
-                        newEpisode: AniListApi.isNewEpisode(modelData)
+                        subtext: (AniListApi.studio(modelData) ? AniListApi.studio(modelData) + " · " : "") + (modelData.seasonYear || "")
+                        epText: AniListApi.isNewEpisode(modelData) ? "NEW EP" : (modelData.episodes ? "EP " + modelData.episodes : "")
                         posterUrl: AniListApi.cover(modelData)
                         onClicked: seriesClicked(modelData.id)
                     }
@@ -372,6 +422,255 @@ Rectangle {
             }
 
             Item { width: 1; height: 32 }
+
+            // ── Simulcasts row ──────────────────────────────────────────────
+            Item {
+                width: parent.width
+                height: simulHeader.implicitHeight + 16 + 350 + 32
+                visible: simulcastList.length > 0
+
+                Item {
+                    id: simulHeader
+                    x: 24; y: 0
+                    width: parent.width - 48
+                    height: simulHeaderCol.implicitHeight
+
+                    Column {
+                        id: simulHeaderCol
+                        spacing: 4
+                        Row {
+                            spacing: 10
+                            Text {
+                                text: "Simulcasts"
+                                color: "#f0f0f5"
+                                font.family: "Montserrat"
+                                font.pixelSize: 20
+                                font.weight: Font.Bold
+                            }
+                            Rectangle {
+                                width: _live.implicitWidth + 14; height: 20; radius: 4
+                                color: Qt.rgba(0.95,0.46,0.13,0.15)
+                                border.color: Qt.rgba(0.95,0.46,0.13,0.30); border.width: 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                Text {
+                                    id: _live; anchors.centerIn: parent
+                                    text: "LIVE"; color: "#f47521"
+                                    font.family: "Inter"; font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                }
+                            }
+                        }
+                        Text {
+                            text: "Same day as Japan"
+                            color: "#8888a0"
+                            font.family: "Inter"
+                            font.pixelSize: 13
+                        }
+                    }
+
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+                        Rectangle {
+                            width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                            Text { text: "<"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: simulList.contentX = Math.max(0, simulList.contentX - 320) }
+                        }
+                        Rectangle {
+                            width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                            Text { text: ">"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: simulList.contentX = Math.min(simulList.contentWidth - simulList.width, simulList.contentX + 320) }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: simulList
+                    x: 24
+                    y: simulHeader.implicitHeight + 16
+                    width: parent.width - 48
+                    height: 350
+                    model: simulcastList
+                    orientation: ListView.Horizontal
+                    spacing: 16
+                    clip: true
+                    flickDeceleration: 3500
+                    maximumFlickVelocity: 3000
+
+                    delegate: AnimePosterCard {
+                        width: 180
+                        title: AniListApi.title(modelData)
+                        rating: AniListApi.score(modelData)
+                        subtext: (AniListApi.studio(modelData) ? AniListApi.studio(modelData) + " · " : "") + (modelData.seasonYear || "")
+                        epText: "EP Ongoing"
+                        posterUrl: AniListApi.cover(modelData)
+                        onClicked: seriesClicked(modelData.id)
+                    }
+                }
+            }
+
+            Item { width: 1; height: 32 }
+
+            // ── Currently Airing row ────────────────────────────────────────
+            Item {
+                width: parent.width
+                height: airingHeader.implicitHeight + 16 + 350 + 32
+                visible: airingList.length > 0
+
+                Item {
+                    id: airingHeader
+                    x: 24; y: 0
+                    width: parent.width - 48
+                    height: airingHeaderCol.implicitHeight
+
+                    Column {
+                        id: airingHeaderCol
+                        spacing: 4
+                        Text {
+                            text: "Currently Airing"
+                            color: "#f0f0f5"
+                            font.family: "Montserrat"
+                            font.pixelSize: 20
+                            font.weight: Font.Bold
+                        }
+                        Text {
+                            text: "New episodes this season"
+                            color: "#8888a0"
+                            font.family: "Inter"
+                            font.pixelSize: 13
+                        }
+                    }
+
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+                        Rectangle {
+                            width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                            Text { text: "<"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: airingListView.contentX = Math.max(0, airingListView.contentX - 320) }
+                        }
+                        Rectangle {
+                            width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                            Text { text: ">"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: airingListView.contentX = Math.min(airingListView.contentWidth - airingListView.width, airingListView.contentX + 320) }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: airingListView
+                    x: 24
+                    y: airingHeader.implicitHeight + 16
+                    width: parent.width - 48
+                    height: 350
+                    model: airingList
+                    orientation: ListView.Horizontal
+                    spacing: 16
+                    clip: true
+                    flickDeceleration: 3500
+                    maximumFlickVelocity: 3000
+
+                    delegate: AnimePosterCard {
+                        width: 180
+                        title: AniListApi.title(modelData)
+                        rating: AniListApi.score(modelData)
+                        subtext: (AniListApi.studio(modelData) ? AniListApi.studio(modelData) + " · " : "") + (modelData.seasonYear || "")
+                        epText: modelData.nextAiringEpisode ? "EP " + modelData.nextAiringEpisode.episode : ""
+                        posterUrl: AniListApi.cover(modelData)
+                        onClicked: seriesClicked(modelData.id)
+                    }
+                }
+            }
+
+            Item { width: 1; height: 32 }
+
+            // ── Top Rated row ───────────────────────────────────────────────
+            Item {
+                width: parent.width
+                height: topRatedHeader.implicitHeight + 16 + 350 + 32
+                visible: trendingList.length > 0
+
+                property var topRatedList: {
+                    var arr = trendingList.slice()
+                    arr.sort(function(a, b) { return (b.averageScore || 0) - (a.averageScore || 0) })
+                    return arr
+                }
+
+                Item {
+                    id: topRatedHeader
+                    x: 24; y: 0
+                    width: parent.width - 48
+                    height: topRatedHeaderCol.implicitHeight
+
+                    Column {
+                        id: topRatedHeaderCol
+                        spacing: 4
+                        Text {
+                            text: "Top Rated"
+                            color: "#f0f0f5"
+                            font.family: "Montserrat"
+                            font.pixelSize: 20
+                            font.weight: Font.Bold
+                        }
+                        Text {
+                            text: "Highest rated of all time"
+                            color: "#8888a0"
+                            font.family: "Inter"
+                            font.pixelSize: 13
+                        }
+                    }
+
+                    Row {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+                        Rectangle {
+                            width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                            Text { text: "<"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: topRatedListView.contentX = Math.max(0, topRatedListView.contentX - 320) }
+                        }
+                        Rectangle {
+                            width: 32; height: 32; radius: 16; color: Qt.rgba(1,1,1,0.05)
+                            Text { text: ">"; color: "#f0f0f5"; anchors.centerIn: parent; font.pixelSize: 14 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: topRatedListView.contentX = Math.min(topRatedListView.contentWidth - topRatedListView.width, topRatedListView.contentX + 320) }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: topRatedListView
+                    x: 24
+                    y: topRatedHeader.implicitHeight + 16
+                    width: parent.width - 48
+                    height: 350
+                    model: parent.topRatedList
+                    orientation: ListView.Horizontal
+                    spacing: 16
+                    clip: true
+                    flickDeceleration: 3500
+                    maximumFlickVelocity: 3000
+
+                    delegate: AnimePosterCard {
+                        width: 180
+                        title: AniListApi.title(modelData)
+                        rating: AniListApi.score(modelData)
+                        subtext: (AniListApi.studio(modelData) ? AniListApi.studio(modelData) + " · " : "") + (modelData.seasonYear || "")
+                        epText: modelData.episodes ? "EP " + modelData.episodes : ""
+                        posterUrl: AniListApi.cover(modelData)
+                        onClicked: seriesClicked(modelData.id)
+                    }
+                }
+            }
+
+            Item { width: 1; height: 48 }
         }
     }
 }

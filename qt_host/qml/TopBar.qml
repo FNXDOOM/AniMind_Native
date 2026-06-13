@@ -49,28 +49,35 @@ Item {
         spacing: 32
 
         // ── Logo ─────────────────────────────────────────────────────────
-        Row {
-            spacing: 8
+        Item {
+            implicitWidth: logoRow.implicitWidth
+            implicitHeight: 40
             Layout.alignment: Qt.AlignVCenter
 
-            Rectangle {
-                width: 32; height: 32
-                radius: 8
-                color: topBar.clrPrimary
+            Row {
+                id: logoRow
+                spacing: 8
+                anchors.verticalCenter: parent.verticalCenter
+
+                Rectangle {
+                    width: 32; height: 32
+                    radius: 8
+                    color: topBar.clrPrimary
+
+                    Text {
+                        anchors.centerIn: parent
+                        anchors.horizontalCenterOffset: 1
+                        text: "\u25B6" // Play icon
+                        color: "white"
+                        font.pixelSize: 16
+                    }
+                }
 
                 Text {
-                    anchors.centerIn: parent
-                    anchors.horizontalCenterOffset: 1
-                    text: "\u25B6" // Play icon
-                    color: "white"
-                    font.pixelSize: 16
+                    text: "ANISTREAM"
+                    color: topBar.clrPrimary
+                    font { family: "Montserrat"; pixelSize: 22; weight: Font.Bold; letterSpacing: 1.1 }
                 }
-            }
-
-            Text {
-                text: "ANISTREAM"
-                color: topBar.clrPrimary
-                font { family: "Montserrat"; pixelSize: 22; weight: Font.Bold; letterSpacing: 1.1 }
             }
 
             MouseArea {
@@ -100,7 +107,7 @@ Item {
                     width: navRow.implicitWidth + 32
                     height: 40
 
-                    property bool isActive: modelData.id !== "search" && topBar.currentPage === modelData.id
+                    property bool isActive: topBar.currentPage === modelData.id
 
                     Rectangle {
                         anchors.fill: parent
@@ -136,13 +143,7 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (modelData.id === "search") {
-                                topBar.searchClicked()
-                            } else {
-                                topBar.navLinkClicked(modelData.id)
-                            }
-                        }
+                        onClicked: topBar.navLinkClicked(modelData.id)
                     }
                 }
             }
