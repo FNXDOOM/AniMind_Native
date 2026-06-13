@@ -181,7 +181,7 @@ Rectangle {
                     id: filterRowContent
                     anchors.centerIn: parent; spacing: 8
                     Text { text: "\u2261"; color: searchPage.showFilters ? "#f47521" : "#f0f0f5"; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
-                    Text { text: "Filters"; color: searchPage.showFilters ? "#f47521" : "#f0f0f5"; font.family: "Inter"; font.pixelSize: 13.5; anchors.verticalCenter: parent.verticalCenter }
+                    Text { text: "Filters"; color: searchPage.showFilters ? "#f47521" : "#f0f0f5"; font.family: "Inter"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: searchPage.showFilters = !searchPage.showFilters }
             }
@@ -239,7 +239,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: modelData
                         color: searchPage.selectedGenre === genreChip.gName ? "#ffffff" : "#8888a0"
-                        font.family: "Inter"; font.pixelSize: 12.5; font.weight: Font.Medium
+                        font.family: "Inter"; font.pixelSize: 13; font.weight: Font.Medium
                         Behavior on color { ColorAnimation { duration: 150 } }
                     }
                     MouseArea {
@@ -262,7 +262,7 @@ Rectangle {
                 return t
             }
             color: "#8888a0"
-            font.family: "Inter"; font.pixelSize: 12.5
+            font.family: "Inter"; font.pixelSize: 13
             bottomPadding: 8
         }
     } // end headerCol
