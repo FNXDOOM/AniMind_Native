@@ -16,12 +16,22 @@ set(CMAKE_AUTOUIC ON)
 get_filename_component(MPV_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../vendor/mpv" ABSOLUTE)
 get_filename_component(MPV_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/include" ABSOLUTE)
 
+# Generate the Windows resource file with the absolute icon path
+# (forward slashes avoid \r escape issues in the RC compiler)
+set(APP_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/animind.ico")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/app.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc"
+    @ONLY
+)
+
 add_executable(AnimindQtHost
     src/main.cpp
     src/auth_manager.cpp
     src/auth_manager.h
     src/mpv_item.cpp
     src/mpv_item.h
+    "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc"
 )
 
 # Bake the Qt QML path into the binary so the engine can always find modules
@@ -47,7 +57,7 @@ target_link_libraries(AnimindQtHost PRIVATE
 )
 
 if(WIN32)
-    set_target_properties(AnimindQtHost PROPERTIES WIN32_EXECUTABLE TRUE)
+    set_target_properties(AnimindQtHost PROPERTIES WIN32_EXECUTABLE FALSE)
 endif()
 
 # --------------------------------------------------------------------------
@@ -60,6 +70,14 @@ add_custom_command(TARGET AnimindQtHost POST_BUILD
         "${MPV_ROOT}/win-x64/libmpv-2.dll"
         "$<TARGET_FILE_DIR:AnimindQtHost>"
     COMMENT "Copying libmpv-2.dll..."
+)
+
+# Copy the app icon next to the exe so Qt can load it at runtime
+add_custom_command(TARGET AnimindQtHost POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/animind.ico"
+        "$<TARGET_FILE_DIR:AnimindQtHost>/animind.ico"
+    COMMENT "Copying animind.ico..."
 )
 
 # Copy the qml/ folder so the exe can find main.qml at runtime

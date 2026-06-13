@@ -8,6 +8,7 @@
 #include <QQuickStyle>
 #include <QFile>
 #include <QTextStream>
+#include <QIcon>
 
 #include "mpv_item.h"
 #include "auth_manager.h"
@@ -40,6 +41,13 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setApplicationName("AnimindPlayer");
     app.setOrganizationName("Animind");
+
+    // Set window icon from the .ico shipped next to the exe
+    QString iconPath = QCoreApplication::applicationDirPath() + "/animind.ico";
+    if (QFile::exists(iconPath))
+        app.setWindowIcon(QIcon(iconPath));
+    else
+        app.setWindowIcon(QIcon(":/icons/animind.ico")); // fallback to Qt resource
 
     QString exeDir = QCoreApplication::applicationDirPath();
     g_logFile.setFileName(exeDir + "/animind_qt.log");
