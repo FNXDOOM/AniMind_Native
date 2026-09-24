@@ -4,15 +4,20 @@ import QtQuick.Layouts
 import "../"
 
 Rectangle {
+    id: browsePage
     color: "#0a0a0a"
     
     property var searchResults: []
     property bool loading: false
     property string errorMsg: ""
     property var genreOpts: ["All Genres", "Action", "Adventure", "Comedy", "Drama", "Fantasy"]
-    property var sortOpts: ["Popularity", "Trending", "Release Date", "Score"]
+    // Order must match AniListApi.searchAnime's sortMap (TRENDING, POPULARITY, START_DATE, SCORE, TITLE)
+    property var sortOpts: ["Trending", "Popularity", "Release Date", "Score"]
     property var seasonOpts: ["Winter", "Spring", "Summer", "Fall"]
-    property int selectedSeasonIdx: 0
+    property int selectedSeasonIdx: {
+        var m = new Date().getMonth()
+        return (m <= 1 || m === 11) ? 0 : (m <= 4 ? 1 : (m <= 7 ? 2 : 3))
+    }
     property int selectedGenreIdx: 0
     property int selectedSortIdx: 0
     property int lm: 32
@@ -118,7 +123,7 @@ Rectangle {
             
             ComboBox {
                 model: seasonOpts
-                currentIndex: (new Date().getMonth() <= 2) ? 0 : ((new Date().getMonth() <= 5) ? 1 : ((new Date().getMonth() <= 8) ? 2 : 3))
+                currentIndex: browsePage.selectedSeasonIdx
                 onActivated: {
                     selectedSeasonIdx = currentIndex
                     performSearch()
@@ -165,7 +170,19 @@ Rectangle {
                             subtext: (AniListApi.studio(modelData) ? AniListApi.studio(modelData) + " · " : "") + (modelData.seasonYear || "")
                             epText: AniListApi.isNewEpisode(modelData) ? "NEW EP" : (modelData.episodes ? "EP " + modelData.episodes : "")
                             posterUrl: AniListApi.cover(modelData)
-                            onClicked: seriesClicked(modelData.id)
+
+                            onClicked: browsePage.seriesClicked(modelData.id)
+                            onAddClicked: {
+                                if (authManager) {
+                                    var item = {
+                                        "anilist_id": modelData.id || modelData.anilist_id,
+                                        "title": title,
+                                        "cover_image_url": posterUrl,
+                                        "rating": rating
+                                    };
+                                    authManager.addToLibrary(item);
+                                }
+                            }
                         }
                     }
                 }
