@@ -33,7 +33,10 @@ AuthManager::AuthManager(QObject* parent)
     connect(&timeout_, &QTimer::timeout, this, &AuthManager::onAuthTimeout);
     refreshTimer_.setSingleShot(true);
     connect(&refreshTimer_, &QTimer::timeout, this, &AuthManager::onRefreshTimeout);
-    restoreSession();
+    // Defer session restore until after the Qt event loop starts.
+    // syncLibraryFromServer() uses a blocking QEventLoop for network calls;
+    // calling it before app.exec() causes a crash / deadlock.
+    QTimer::singleShot(0, this, [this]() { restoreSession(); });
 }
 
 bool AuthManager::authenticated() const
@@ -89,6 +92,8 @@ void AuthManager::signOut()
     sessionId_.clear();
     expiresAtMs_ = 0;
     libraryShows_.clear();
+    supabaseToken_.clear();
+    supabaseTokenExpiresMs_ = 0;
     emit sessionChanged();
     emit libraryShowsChanged();
 
@@ -472,22 +477,42 @@ void AuthManager::persistLibraryCache(const QJsonArray& items) const
     f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
+void AuthManager::setSupabaseConfig(const QString& url, const QString& anonKey)
+{
+    supabaseUrl_ = url.trimmed();
+    supabaseAnonKey_ = anonKey.trimmed();
+    while (supabaseUrl_.endsWith('/'))
+        supabaseUrl_.chop(1);
+}
+
 void AuthManager::syncLibraryFromServer()
 {
+    if (!hasSupabaseConfig()) {
+        qWarning() << "Library sync: ANIMIND_SUPABASE_URL / ANIMIND_SUPABASE_ANON_KEY not configured, skipping.";
+        return;
+    }
     if (!authenticated() || accessToken_.isEmpty()) {
         return;
     }
 
-    QUrl url(QString::fromUtf8(kDefaultBackendBaseUrl) + "/api/shows");
+    const QString sbToken = getSupabaseToken();
+    if (sbToken.isEmpty()) {
+        qWarning() << "Library sync: could not obtain Supabase token, skipping.";
+        return;
+    }
+
+    // Call Supabase REST API: GET /rest/v1/watchlist?user_id=eq.<uid>&order=created_at.desc
+    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
     QUrlQuery query;
+    query.addQueryItem("user_id", QString("eq.") + userId_);
+    query.addQueryItem("order", "created_at.desc");
     query.addQueryItem("limit", "200");
-    query.addQueryItem("offset", "0");
     url.setQuery(query);
 
     QNetworkRequest req(url);
     req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("User-Agent", "Animind-Qt/1.0");
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(accessToken_).toUtf8());
+    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
+    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
 
     auto* reply = net_.get(req);
     QEventLoop loop;
@@ -502,22 +527,29 @@ void AuthManager::syncLibraryFromServer()
 
     const auto doc = QJsonDocument::fromJson(reply->readAll());
     reply->deleteLater();
-    if (!doc.isObject()) {
-        qWarning() << "Library sync failed: invalid JSON payload";
+    if (!doc.isArray()) {
+        qWarning() << "Library sync failed: expected JSON array from Supabase";
         return;
     }
 
-    const QJsonArray items = doc.object().value("data").toArray();
+    // Map Supabase rows -> {anime_data fields + userStatus: status}
+    const QJsonArray rows = doc.array();
+    QJsonArray items;
     libraryShows_.clear();
-    libraryShows_.reserve(items.size());
-    for (const auto& item : items) {
-        if (item.isObject()) {
-            libraryShows_.push_back(item.toObject().toVariantMap());
-        }
+    libraryShows_.reserve(rows.size());
+    for (const auto& row : rows) {
+        if (!row.isObject()) continue;
+        const QJsonObject r = row.toObject();
+        QJsonObject animeData = r.value("anime_data").toObject();
+        animeData.insert("userStatus", r.value("status").toString());
+        animeData.insert("status", r.value("status").toString());
+        animeData.insert("anime_id", r.value("anime_id"));
+        libraryShows_.push_back(animeData.toVariantMap());
+        items.append(animeData);
     }
     persistLibraryCache(items);
     emit libraryShowsChanged();
-    qInfo() << "Library sync complete. Items:" << items.size();
+    qInfo() << "Library sync complete. Items:" << rows.size();
 }
 
 QVariantMap AuthManager::getShowDetails(const QString& showId)
@@ -730,4 +762,237 @@ void AuthManager::scheduleRefreshTimer()
     if (msUntilRefresh < 15000) msUntilRefresh = 15000;
     if (msUntilRefresh > INT_MAX) msUntilRefresh = INT_MAX;
     refreshTimer_.start(static_cast<int>(msUntilRefresh));
+}
+
+void AuthManager::addToLibrary(const QVariantMap& animeData)
+{
+    if (!hasSupabaseConfig()) {
+        lastError_ = "Watchlist sync is not configured on this device.";
+        emit lastErrorChanged();
+        return;
+    }
+    if (!authenticated()) return;
+
+    QString animeId = animeData.value("anilist_id").toString();
+    if (animeId.isEmpty()) animeId = animeData.value("id").toString();
+    if (animeId.isEmpty()) return;
+
+    // Check already in local list
+    for (const auto& v : libraryShows_) {
+        const QVariantMap item = v.toMap();
+        if (item.value("anime_id").toString() == animeId || item.value("id").toString() == animeId) {
+            return; // already in list
+        }
+    }
+
+    // Optimistic local update
+    QVariantMap newItem = animeData;
+    newItem.insert("anime_id", animeId);
+    newItem.insert("anilist_id", animeId);
+    newItem.insert("userStatus", "Plan to Watch");
+    newItem.insert("status", "Plan to Watch");
+    libraryShows_.prepend(newItem);
+    emit libraryShowsChanged();
+
+    // Persist to Supabase
+    const QString sbToken = getSupabaseToken();
+    if (sbToken.isEmpty()) {
+        qWarning() << "addToLibrary: no Supabase token";
+        return;
+    }
+
+    // Build anime_data without userStatus
+    QJsonObject animeJson = QJsonObject::fromVariantMap(animeData);
+    animeJson.remove("userStatus");
+    animeJson.remove("status");
+
+    QJsonObject body;
+    body.insert("user_id", userId_);
+    body.insert("anime_id", animeId);
+    body.insert("anime_data", animeJson);
+    body.insert("status", QStringLiteral("Plan to Watch"));
+
+    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
+    QNetworkRequest req(url);
+    req.setRawHeader("Accept", "application/json");
+    req.setRawHeader("Content-Type", "application/json");
+    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
+    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
+    // Supabase upsert on conflict
+    req.setRawHeader("Prefer", "resolution=merge-duplicates");
+
+    auto* reply = net_.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, reply, [reply]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "addToLibrary Supabase failed:" << reply->errorString() << reply->readAll();
+        } else {
+            qDebug() << "addToLibrary: saved to Supabase";
+        }
+        reply->deleteLater();
+    });
+}
+
+void AuthManager::updateShowStatus(const QString& showId, const QString& status)
+{
+    if (!hasSupabaseConfig())
+        return;
+    // Optimistic local update
+    bool found = false;
+    for (int i = 0; i < libraryShows_.size(); ++i) {
+        QVariantMap item = libraryShows_[i].toMap();
+        if (item.value("anime_id").toString() == showId || item.value("anilist_id").toString() == showId || item.value("id").toString() == showId) {
+            item.insert("userStatus", status);
+            item.insert("status", status);
+            libraryShows_[i] = item;
+            found = true;
+            break;
+        }
+    }
+    if (found) emit libraryShowsChanged();
+
+    // Persist to Supabase
+    const QString sbToken = getSupabaseToken();
+    if (sbToken.isEmpty()) {
+        qWarning() << "updateShowStatus: no Supabase token";
+        return;
+    }
+
+    QJsonObject body;
+    body.insert("status", status);
+
+    // PATCH /rest/v1/watchlist?user_id=eq.<uid>&anime_id=eq.<id>
+    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
+    QUrlQuery query;
+    query.addQueryItem("user_id", QString("eq.") + userId_);
+    query.addQueryItem("anime_id", QString("eq.") + showId);
+    url.setQuery(query);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Accept", "application/json");
+    req.setRawHeader("Content-Type", "application/json");
+    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
+    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
+
+    auto* reply = net_.sendCustomRequest(req, "PATCH", QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, reply, [reply, showId, status]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "updateShowStatus Supabase failed:" << reply->errorString() << reply->readAll();
+        } else {
+            qDebug() << "updateShowStatus: saved show" << showId << "to" << status;
+        }
+        reply->deleteLater();
+    });
+}
+
+void AuthManager::removeShow(const QString& showId)
+{
+    if (!hasSupabaseConfig())
+        return;
+    // Optimistic local update
+    int removeIdx = -1;
+    for (int i = 0; i < libraryShows_.size(); ++i) {
+        QVariantMap item = libraryShows_[i].toMap();
+        if (item.value("anime_id").toString() == showId || item.value("anilist_id").toString() == showId || item.value("id").toString() == showId) {
+            removeIdx = i;
+            break;
+        }
+    }
+    if (removeIdx >= 0) {
+        libraryShows_.removeAt(removeIdx);
+        emit libraryShowsChanged();
+    }
+
+    // Delete from Supabase
+    const QString sbToken = getSupabaseToken();
+    if (sbToken.isEmpty()) {
+        qWarning() << "removeShow: no Supabase token";
+        return;
+    }
+
+    // DELETE /rest/v1/watchlist?user_id=eq.<uid>&anime_id=eq.<id>
+    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
+    QUrlQuery query;
+    query.addQueryItem("user_id", QString("eq.") + userId_);
+    query.addQueryItem("anime_id", QString("eq.") + showId);
+    url.setQuery(query);
+
+    QNetworkRequest req(url);
+    req.setRawHeader("Accept", "application/json");
+    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
+    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
+
+    auto* reply = net_.deleteResource(req);
+    connect(reply, &QNetworkReply::finished, reply, [reply, showId]() {
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "removeShow Supabase failed:" << reply->errorString() << reply->readAll();
+        } else {
+            qDebug() << "removeShow: deleted show" << showId << "from Supabase";
+        }
+        reply->deleteLater();
+    });
+}
+
+QString AuthManager::getSupabaseToken()
+{
+    // Return cached token if still valid (with 30s margin)
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!supabaseToken_.isEmpty() && supabaseTokenExpiresMs_ > now + 30000) {
+        return supabaseToken_;
+    }
+
+    if (accessToken_.isEmpty() || sessionId_.isEmpty()) return QString();
+
+    // Call Clerk FAPI to get a Supabase-compatible JWT using the 'supabase' template.
+    // Endpoint: POST /v1/client/sessions/{session_id}/tokens/supabase
+    // This mirrors what the web frontend does: getToken({ template: 'supabase' })
+    const QString clerkFapi = QStringLiteral("https://clerk.fnxdoom.in");
+    const QString clerkUrl = clerkFapi + "/v1/client/sessions/" + sessionId_ + "/tokens/supabase";
+
+    QUrl clerkQUrl(clerkUrl);
+    QNetworkRequest clerkReq(clerkQUrl);
+    clerkReq.setRawHeader("Accept", "application/json");
+    clerkReq.setRawHeader("Authorization", QString("Bearer %1").arg(accessToken_).toUtf8());
+    clerkReq.setRawHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    // POST with empty body
+    auto* clerkReply = net_.post(clerkReq, QByteArray());
+    QEventLoop loop;
+    connect(clerkReply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    if (clerkReply->error() != QNetworkReply::NoError) {
+        qWarning() << "getSupabaseToken: Clerk FAPI request failed:" << clerkReply->errorString() << clerkReply->readAll();
+        clerkReply->deleteLater();
+        return QString();
+    }
+
+    const auto doc = QJsonDocument::fromJson(clerkReply->readAll());
+    clerkReply->deleteLater();
+    if (!doc.isObject()) return QString();
+
+    // Clerk returns { "jwt": "<token>" }
+    const QString token = doc.object().value("jwt").toString();
+    if (token.isEmpty()) {
+        qWarning() << "getSupabaseToken: no jwt field in Clerk response";
+        return QString();
+    }
+
+    supabaseToken_ = token;
+    // Decode expiry from JWT payload
+    const QStringList parts = token.split('.');
+    if (parts.size() >= 2) {
+        QByteArray b64 = parts.at(1).toUtf8();
+        b64.replace('-', '+');
+        b64.replace('_', '/');
+        while (b64.size() % 4 != 0) b64.append('=');
+        const QByteArray payload = QByteArray::fromBase64(b64);
+        const qint64 expSec = extractJsonNumber(payload, "exp");
+        supabaseTokenExpiresMs_ = expSec > 0 ? expSec * 1000 : (now + 3600000);
+    } else {
+        supabaseTokenExpiresMs_ = now + 3600000;
+    }
+
+    qDebug() << "getSupabaseToken: obtained Supabase JWT from Clerk, expires in"
+             << ((supabaseTokenExpiresMs_ - now) / 1000) << "seconds";
+    return supabaseToken_;
 }

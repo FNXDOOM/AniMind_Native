@@ -27,10 +27,20 @@ public:
     QString lastError() const { return lastError_; }
     QVariantList libraryShows() const { return libraryShows_; }
 
+    // Supabase project config comes from the environment (see main.cpp);
+    // it is deliberately not compiled into the binary.
+    void setSupabaseConfig(const QString& url, const QString& anonKey);
+    bool hasSupabaseConfig() const { return !supabaseUrl_.isEmpty() && !supabaseAnonKey_.isEmpty(); }
+
     Q_INVOKABLE void signInWithBrowserBridge();
     Q_INVOKABLE void signOut();
     Q_INVOKABLE QVariantMap getShowDetails(const QString& showId);
     Q_INVOKABLE QVariantMap getStreamTicket(const QString& episodeId, int audioTrackIndex = -1, const QString& clientType = "native");
+
+    // Watchlist management
+    Q_INVOKABLE void addToLibrary(const QVariantMap& animeData);
+    Q_INVOKABLE void updateShowStatus(const QString& showId, const QString& status);
+    Q_INVOKABLE void removeShow(const QString& showId);
 
 signals:
     void sessionChanged();
@@ -56,6 +66,7 @@ private:
     void syncLibraryFromServer();
     void persistLibraryCache(const QJsonArray& items) const;
     void finishSignInSuccess(const QString& userId, const QString& email, const QString& token, const QString& sessionId, qint64 expMs);
+    QString getSupabaseToken();
     QString deriveClerkFapiFromTokenPayload(const QByteArray& payload) const;
     QString resolveEmailFromClientResponse(const QJsonObject& root, const QString& preferredSessionId) const;
     QString resolveSessionIdFromClientResponse(const QJsonObject& root, const QString& preferredSessionId) const;
@@ -81,4 +92,8 @@ private:
     bool clerkSessionTokenEndpointDisabled_ = false;
     QString lastError_;
     QVariantList libraryShows_;
+    QString supabaseToken_;
+    qint64 supabaseTokenExpiresMs_ = 0;
+    QString supabaseUrl_;
+    QString supabaseAnonKey_;
 };

@@ -84,8 +84,11 @@ int main(int argc, char *argv[])
         });
 
     engine.rootContext()->setContextProperty("authManager", &authManager);
-    engine.rootContext()->setContextProperty("supabaseUrl", QString(qgetenv("ANIMIND_SUPABASE_URL")));
-    engine.rootContext()->setContextProperty("supabaseKey", QString(qgetenv("ANIMIND_SUPABASE_ANON_KEY")));
+    const QString supabaseUrl  = qgetenv("ANIMIND_SUPABASE_URL");
+    const QString supabaseKey  = qgetenv("ANIMIND_SUPABASE_ANON_KEY");
+    authManager.setSupabaseConfig(supabaseUrl, supabaseKey);
+    engine.rootContext()->setContextProperty("supabaseUrl", supabaseUrl);
+    engine.rootContext()->setContextProperty("supabaseKey", supabaseKey);
 
     engine.load(qmlUrl);
     return app.exec();
