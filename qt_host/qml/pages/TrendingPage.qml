@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import "../"
 
 Rectangle {
+    id: trendingPage
     color: "#0a0a0a"
 
     property var trendingList: []
@@ -80,6 +81,18 @@ Rectangle {
                         epText: AniListApi.isNewEpisode(modelData) ? "NEW EP" : (modelData.episodes ? "EP " + modelData.episodes : "")
                         posterUrl: AniListApi.cover(modelData)
                         onClicked: seriesClicked(modelData.id)
+                        onWatchClicked: trendingPage.playRequested(modelData.id, title)
+                        onAddClicked: {
+                            if (authManager) {
+                                var item = {
+                                    "anilist_id": modelData.id || modelData.anilist_id,
+                                    "title": title,
+                                    "cover_image_url": posterUrl,
+                                    "rating": rating
+                                };
+                                authManager.addToLibrary(item);
+                            }
+                        }
                     }
                 }
             }
