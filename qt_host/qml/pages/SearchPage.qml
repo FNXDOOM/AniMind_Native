@@ -127,6 +127,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     verticalAlignment: TextInput.AlignVCenter
+                    cursorVisible: true
                     color: "#f0f0f5"
                     selectionColor: "#f47521"
                     selectedTextColor: "#ffffff"
@@ -359,6 +360,17 @@ Rectangle {
                     epText:    AniListApi.isNewEpisode(modelData) ? "EP Ongoing"
                                : (modelData.episodes ? "EP " + modelData.episodes : "")
                     onClicked: searchPage.seriesClicked(modelData.id)
+                    onAddClicked: {
+                        if (authManager) {
+                            var item = {
+                                "anilist_id": modelData.id || modelData.anilist_id,
+                                "title": title,
+                                "cover_image_url": posterUrl,
+                                "rating": rating
+                            };
+                            authManager.addToLibrary(item);
+                        }
+                    }
                 }
             }
         }
