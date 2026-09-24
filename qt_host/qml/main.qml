@@ -685,8 +685,15 @@ ApplicationWindow {
                     fileDialog.open()
                 })
                 item.addToListRequested.connect(function(anilistId) {
-                    console.log("Add to list:", anilistId)
+                    if (authManager) {
+                        authManager.addToLibrary({ "anilist_id": anilistId })
+                    }
                 })
+                if (item.episodePlayRequested) {
+                    item.episodePlayRequested.connect(function(url, titleStr, epLabel, thumb) {
+                        root.playStreamNow(url, titleStr, epLabel, thumb)
+                    })
+                }
             }
         }
         Loader {
