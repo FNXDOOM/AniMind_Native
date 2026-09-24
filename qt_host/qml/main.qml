@@ -11,7 +11,7 @@ ApplicationWindow {
     id: root
     width: 1280
     height: 720
-    minimumWidth: 800
+    minimumWidth: 380
     minimumHeight: 520
     visible: true
     title: "Animind Player"
@@ -53,14 +53,16 @@ ApplicationWindow {
 
     // ── Responsive scale ──────────────────────────────────────────────────
     // Breakpoints follow content, not devices: the sidebar stops fitting at
-    // 1024, and the nav moves to a bottom bar below 640.
+    // 1024, so the bottom bar takes over nav for the whole range below it.
+    // Gating the bar on isMobile instead left 640–1023px with neither rail nor
+    // tabs, and minimumWidth made isMobile unreachable.
     readonly property int  bpMobile:  640
     readonly property int  bpTablet:  1024
     readonly property bool isMobile:  width < bpMobile
     readonly property bool isCompact: width < bpTablet
     readonly property int  navW:      isCompact ? 0 : 208
     readonly property int  headerH:   isMobile ? 56 : 64
-    readonly property int  tabH:      isMobile ? 64 : 0
+    readonly property int  tabH:      isCompact ? 64 : 0
     readonly property int  gutter:    isMobile ? 16 : (isCompact ? 24 : 32)
 
     // clamp() equivalent: linear between two viewport anchors, then bounded.
