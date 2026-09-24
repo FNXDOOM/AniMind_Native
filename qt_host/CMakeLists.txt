@@ -57,7 +57,7 @@ target_link_libraries(AnimindQtHost PRIVATE
 )
 
 if(WIN32)
-    set_target_properties(AnimindQtHost PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(AnimindQtHost PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
 # --------------------------------------------------------------------------
