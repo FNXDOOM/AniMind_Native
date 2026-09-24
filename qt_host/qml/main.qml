@@ -15,19 +15,62 @@ ApplicationWindow {
     minimumHeight: 520
     visible: true
     title: "Animind Player"
-    color: "#0a0a0f"
+    color: ink
 
     Material.theme: Material.Dark
 
-    // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color accentOrange: "#f47521"
-    readonly property color accentPurple: "#6f00be"
-    readonly property color clrPrimary:   "#f47521"
-    readonly property color clrMuted:     "#8888a0"
-    readonly property color clrOnSurface: "#f0f0f5"
-    readonly property string iconFont:    "Inter"
-    readonly property string bodyFont:    "Inter"
-    readonly property string displayFont: "Montserrat"
+    // ── Design tokens: "late-night broadcast" ─────────────────────────────
+    // Surfaces. Blue-shifted near-black: projector dark, not terminal dark.
+    readonly property color ink:          "#07070d"
+    readonly property color surface:      "#101119"
+    readonly property color veil:         "#04040a"
+    readonly property color hairline:     Qt.rgba(1, 1, 1, 0.08)
+
+    // Brand. `signalOrange` is the on-air mark; `dusk` only ever appears as the far
+    // stop of a gradient, never as a standalone accent.
+    readonly property color signalOrange: "#f47521"
+    readonly property color signalDeep:   "#c9551a"
+    readonly property color dusk:         "#6f00be"
+
+    // Text tiers.
+    readonly property color textPrimary:  "#f2f2f7"
+    readonly property color textMuted:    "#9a9ab2"
+    readonly property color textFaint:    "#62627c"
+
+    // Type. Bahnschrift is DIN-derived and ships with Windows 10+: the
+    // on-screen-graphics voice of broadcast and TV guides. Chains fall back to
+    // a sane sans on machines without it.
+    readonly property string displayFont:  "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+    readonly property string bodyFont:     "Segoe UI Variable Text, Segoe UI"
+    readonly property string uiFont:       displayFont
+    readonly property string iconFont:     "Segoe MDL2 Assets"
+
+    // Type scale. QML rejects decimal font.pixelSize literals, so these are int.
+    readonly property int tsHero:       52
+    readonly property int tsPage:       30
+    readonly property int tsSection:    22
+    readonly property int tsCard:       15
+    readonly property int tsBody:       14
+    readonly property int tsMeta:       12
+    readonly property int tsEyebrow:    11
+    readonly property real trEyebrow:    2.6
+    readonly property real trTally:      1.2
+
+    // Spacing rhythm: 8px base.
+    readonly property int gutter:       32
+    readonly property int gapCard:      20
+    readonly property int gapRow:       32
+
+    // Honour an explicit request for less movement. Qt 6 removed Qt.getenv(),
+    // so this reads a launch flag instead of an environment variable.
+    readonly property bool reduceMotion: Qt.application.arguments.indexOf("--reduce-motion") !== -1
+
+    // Aliases kept for pages not yet moved onto the new names.
+    readonly property color accentOrange: signalOrange
+    readonly property color accentPurple: dusk
+    readonly property color clrPrimary:   signalOrange
+    readonly property color clrMuted:     textMuted
+    readonly property color clrOnSurface: textPrimary
 
     // ── Navigation state ──────────────────────────────────────────────────
     // Pages: "home" | "browse" | "simulcast" | "simulcastDetail" | "mylist" | "history" | "settings" | "player"
