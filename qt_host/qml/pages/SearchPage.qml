@@ -32,7 +32,11 @@ Rectangle {
     readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
     readonly property string iconFont:    "Segoe MDL2 Assets"
     readonly property int    gutter:      width < 640 ? 16 : (width < 1024 ? 24 : 32)
-    readonly property bool   showRail:    width >= 1100
+    // This is the content column, not the window: at the default 1280 window
+    // the sidebar takes 208px, so a threshold above 1072 could never be met
+    // and the rail stayed hidden on a full-size desktop. 900 leaves ~570px for
+    // results once the 240px rail and its gutters are subtracted.
+    readonly property bool   showRail:    width >= 900
     readonly property int    railW:       240
 
     readonly property var typeOpts:   [ { v: "",         label: "Any" },
@@ -227,6 +231,7 @@ Rectangle {
                     Repeater {
                         model: modelData.opts
                         delegate: Item {
+                            id: filterOpt
                             required property var modelData
                             required property int index
                             width: parent.width
@@ -238,16 +243,22 @@ Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: 9
                                 Rectangle {
-                                    width: 15; height: 15; radius: 3
+                                    width: 15; height: 15; radius: 7.5
                                     anchors.verticalCenter: parent.verticalCenter
-                                    color: parent.parent.on ? "#f5f5f5" : "transparent"
-                                    border.color: parent.parent.on ? "#f5f5f5" : "#3a3a3a"
+                                    color: "transparent"
+                                    border.color: filterOpt.on ? "#f5f5f5" : "#3a3a3a"
                                     border.width: 1
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: 7; height: 7; radius: 3.5
+                                        color: "#f5f5f5"
+                                        visible: filterOpt.on
+                                    }
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: modelData.label
-                                    color: parent.parent.on ? "#ffffff" : "#b3b3b3"
+                                    color: filterOpt.on ? "#ffffff" : "#b3b3b3"
                                     font.family: searchPage.bodyFont
                                     font.pixelSize: 13
                                 }
@@ -286,21 +297,34 @@ Rectangle {
                         Repeater {
                             model: searchPage.yearOpts
                             delegate: Item {
+                                id: yearOpt
                                 required property var modelData
                                 width: yearCol.width
                                 height: 24
                                 readonly property bool on: searchPage.fYear === modelData
-                                Text {
-                                    anchors { left: parent.left; leftMargin: 2; verticalCenter: parent.verticalCenter }
-                                    text: modelData === 0 ? "Any year" : String(modelData)
-                                    color: on ? "#ffffff" : "#b3b3b3"
-                                    font.family: searchPage.bodyFont
-                                    font.pixelSize: 13
-                                }
-                                Rectangle {
-                                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                                    width: 2; height: 14; radius: 1; color: "#ffffff"
-                                    visible: on
+                                Row {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 9
+                                    Rectangle {
+                                        width: 15; height: 15; radius: 7.5
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: "transparent"
+                                        border.color: yearOpt.on ? "#f5f5f5" : "#3a3a3a"
+                                        border.width: 1
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: 7; height: 7; radius: 3.5
+                                            color: "#f5f5f5"
+                                            visible: yearOpt.on
+                                        }
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: modelData === 0 ? "Any year" : String(modelData)
+                                        color: yearOpt.on ? "#ffffff" : "#b3b3b3"
+                                        font.family: searchPage.bodyFont
+                                        font.pixelSize: 13
+                                    }
                                 }
                                 MouseArea {
                                     anchors.fill: parent
