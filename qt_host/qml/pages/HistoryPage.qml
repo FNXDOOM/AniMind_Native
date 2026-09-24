@@ -316,7 +316,6 @@ Item {
                 id: rowRoot
 
                 required property var modelData
-                required property int index
 
                 width: ListView.view ? ListView.view.width : 0
                 height: 80
@@ -445,10 +444,7 @@ Item {
                 }
             }
 
-            delegate: HistoryEntryRow {
-                modelData: root.historyEntries[index]
-                index: model.index !== undefined ? model.index : 0
-            }
+            delegate: HistoryEntryRow { }
         }
     }
 }
