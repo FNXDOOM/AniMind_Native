@@ -23,6 +23,37 @@ Item {
     // Automatically updates whenever authManager.libraryShowsChanged is emitted
     property var shows: authManager ? authManager.libraryShows : []
 
+    property string currentTab: "All"
+    property string searchQuery: ""
+
+    property var filteredShows: {
+        var result = []
+        var searchLower = searchQuery.toLowerCase().trim()
+        var src = shows
+        for (var i = 0; i < src.length; ++i) {
+            var item = src[i]
+            var status = item.userStatus || item.status || "Plan to Watch"
+            
+            if (currentTab !== "All" && status !== currentTab) {
+                continue
+            }
+            if (searchLower !== "") {
+                var title = (item.title || "").toLowerCase()
+                var titleEnglish = (item.title_english || "").toLowerCase()
+                var titleRomaji = (item.title_romaji || "").toLowerCase()
+                if (title.indexOf(searchLower) === -1 && 
+                    titleEnglish.indexOf(searchLower) === -1 && 
+                    titleRomaji.indexOf(searchLower) === -1) {
+                    continue
+                }
+            }
+            result.push(item)
+        }
+        return result
+    }
+
+    property var tabs: ["All", "Watching", "Completed", "On Hold", "Dropped", "Plan to Watch"]
+
     // ── State helpers ─────────────────────────────────────────────────────
     property bool emptyStateVisible: false
 
@@ -36,9 +67,6 @@ Item {
     readonly property color clrSurface:    "#1c1b1b"
 
     // ── Loading → empty timeout ───────────────────────────────────────────
-    // Starts when page becomes visible + authenticated + list is empty.
-    // If shows arrive before it fires, it is stopped.
-    // If it fires with an empty list, transitions to the empty state.
     Timer {
         id: emptyTimeout
         interval: 5000
@@ -50,7 +78,6 @@ Item {
         }
     }
 
-    // Watch for conditions that should start/stop the timer
     onIsAuthenticatedChanged: {
         if (isAuthenticated && shows.length === 0) {
             emptyStateVisible = false
@@ -92,9 +119,8 @@ Item {
         Column {
             anchors.centerIn: parent
             spacing: 20
-            width: Math.min(parent.width - 64, 360)
+            width: Math.max(0, Math.min(parent.width - 64, 360))
 
-            // Icon
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "\u2605"
@@ -102,29 +128,26 @@ Item {
                 font { pixelSize: 64 }
             }
 
-            // Heading
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Sign in to view your list"
                 color: myListPage.clrOnSurface
-                font { family: "Montserrat"; pixelSize: 22; weight: Font.DemiBold }
+                font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 22; weight: Font.DemiBold }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
             }
 
-            // Sub-text
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Keep track of the anime you love and pick up right where you left off."
                 color: myListPage.clrMuted
-                font { family: "Inter"; pixelSize: 14 }
+                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14 }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
             }
 
-            // Sign In button
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: signInLabel.implicitWidth + 48
@@ -143,7 +166,7 @@ Item {
                     anchors.centerIn: parent
                     text: authManager && authManager.signingIn ? "Signing In…" : "Sign In"
                     color: myListPage.clrPrimary
-                    font { family: "Inter"; pixelSize: 14; weight: Font.DemiBold; letterSpacing: 0.5 }
+                    font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14; weight: Font.DemiBold; letterSpacing: 0.5 }
                 }
 
                 MouseArea {
@@ -161,7 +184,7 @@ Item {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // STATE: Loading — BusyIndicator (authenticated, empty list, timer not fired)
+    // STATE: Loading — simple spinner (authenticated, empty list, timer not fired)
     // ─────────────────────────────────────────────────────────────────────
     Item {
         anchors.fill: parent
@@ -173,39 +196,29 @@ Item {
             anchors.centerIn: parent
             spacing: 16
 
-            BusyIndicator {
+            // Simple animated spinner without BusyIndicator
+            Rectangle {
+                id: spinnerRing
                 anchors.horizontalCenter: parent.horizontalCenter
-                running: parent.parent.visible
-                width: 48; height: 48
+                width: 40; height: 40
+                radius: 20
+                color: "transparent"
+                border.color: myListPage.clrPrimary
+                border.width: 3
+                opacity: 0.7
 
-                contentItem: Item {
-                    anchors.fill: parent
+                Rectangle {
+                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter }
+                    width: 6; height: 6; radius: 3
+                    color: myListPage.clrPrimary
+                    anchors.topMargin: -3
+                }
 
-                    Rectangle {
-                        id: spinnerRing
-                        anchors.centerIn: parent
-                        width: 40; height: 40
-                        radius: 20
-                        color: "transparent"
-                        border.color: myListPage.clrPrimary
-                        border.width: 3
-                        opacity: 0.7
-
-                        // Animate rotation via a child item
-                        Rectangle {
-                            anchors { top: parent.top; horizontalCenter: parent.horizontalCenter }
-                            width: 6; height: 6; radius: 3
-                            color: myListPage.clrPrimary
-                            anchors.topMargin: -3
-                        }
-
-                        RotationAnimator on rotation {
-                            from: 0; to: 360
-                            duration: 900
-                            loops: Animation.Infinite
-                            running: spinnerRing.visible
-                        }
-                    }
+                RotationAnimator on rotation {
+                    from: 0; to: 360
+                    duration: 900
+                    loops: Animation.Infinite
+                    running: spinnerRing.visible
                 }
             }
 
@@ -213,7 +226,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Loading your list…"
                 color: myListPage.clrMuted
-                font { family: "Inter"; pixelSize: 14 }
+                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14 }
             }
         }
     }
@@ -230,7 +243,7 @@ Item {
         Column {
             anchors.centerIn: parent
             spacing: 16
-            width: Math.min(parent.width - 64, 360)
+            width: Math.max(0, Math.min(parent.width - 64, 360))
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -243,7 +256,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Your list is empty — add some shows!"
                 color: myListPage.clrOnSurface
-                font { family: "Montserrat"; pixelSize: 20; weight: Font.DemiBold }
+                font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 20; weight: Font.DemiBold }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -253,7 +266,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Browse or search for anime and tap the bookmark icon to save them here."
                 color: myListPage.clrMuted
-                font { family: "Inter"; pixelSize: 14 }
+                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14 }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -268,80 +281,191 @@ Item {
         anchors.fill: parent
         visible: myListPage.shows.length > 0
 
-        // Page header
-        Item {
-            id: resultsHeader
-            anchors { top: parent.top; left: parent.left; right: parent.right }
-            height: 64
+        // Page header with Tabs and Search
+        ColumnLayout {
+            id: headerCol
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                topMargin: 24
+                leftMargin: 24
+                rightMargin: 24
+            }
+            spacing: 24
 
-            Text {
-                anchors { left: parent.left; leftMargin: 32; verticalCenter: parent.verticalCenter }
-                text: "My List"
-                color: myListPage.clrOnSurface
-                font { family: "Montserrat"; pixelSize: 24; weight: Font.Bold }
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+
+                Text {
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    text: "My List"
+                    color: myListPage.clrOnSurface
+                    font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 28; weight: Font.Bold }
+                }
+
+                TextField {
+                    id: searchInput
+                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                    width: 250
+
+                    placeholderText: "Search your list..."
+                    placeholderTextColor: "#6a5f5a"
+                    text: myListPage.searchQuery
+                    onTextChanged: myListPage.searchQuery = text
+
+                    color: myListPage.clrOnSurface
+                    selectionColor: myListPage.clrPrimary
+                    selectedTextColor: "#ffffff"
+
+                    background: Rectangle {
+                        color: "#1a1919"
+                        radius: 8
+                        border.color: searchInput.activeFocus ? myListPage.clrPrimary : "#2e2c2c"
+                        border.width: 1
+                    }
+
+                    font.family: "Segoe UI Variable Text, Segoe UI"
+                    font.pixelSize: 14
+                    leftPadding: 12
+                    rightPadding: 12
+                    topPadding: 8
+                    bottomPadding: 8
+                }
             }
 
-            Text {
-                anchors { right: parent.right; rightMargin: 32; verticalCenter: parent.verticalCenter }
-                text: myListPage.shows.length + " show" + (myListPage.shows.length === 1 ? "" : "s")
-                color: myListPage.clrMuted
-                font { family: "Inter"; pixelSize: 13 }
+            // Tabs
+            Flickable {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                contentWidth: tabsRow.width
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                Row {
+                    id: tabsRow
+                    spacing: 12
+                    Repeater {
+                        model: myListPage.tabs
+                        delegate: Rectangle {
+                            property bool isSelected: myListPage.currentTab === modelData
+                            
+                            width: tabText.implicitWidth + 24
+                            height: 36
+                            radius: 8
+                            color: isSelected ? myListPage.clrPrimary : "#1c1b1b"
+                            border.color: isSelected ? myListPage.clrPrimary : "#2e2c2c"
+                            border.width: 1
+                            
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            
+                            Text {
+                                id: tabText
+                                anchors.centerIn: parent
+                                text: {
+                                    var count = 0;
+                                    var src = myListPage.shows;
+                                    for (var i = 0; i < src.length; ++i) {
+                                        var status = src[i].userStatus || src[i].status || "Plan to Watch";
+                                        if (modelData === "All" || status === modelData) {
+                                            count++;
+                                        }
+                                    }
+                                    return modelData + " (" + count + ")"
+                                }
+                                color: isSelected ? "#131313" : myListPage.clrMuted
+                                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13; weight: isSelected ? Font.DemiBold : Font.Normal }
+                            }
+                            
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: myListPage.currentTab = modelData
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // Scrollable grid
-        ScrollView {
-            id: resultsScroll
+        Flickable {
+            id: resultsFlickable
             anchors {
-                top: resultsHeader.bottom
+                top: headerCol.bottom
                 left: parent.left
                 right: parent.right
                 bottom: parent.bottom
+                topMargin: 16
                 leftMargin: 24
                 rightMargin: 24
                 bottomMargin: 16
             }
             clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            contentHeight: gridFlow.height
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            GridView {
-                id: showsGrid
-                width: resultsScroll.width
+            Flow {
+                id: gridFlow
+                width: parent.width
+                spacing: 16
 
-                // 4–5 columns: target cell width ~190 px, minimum 4 cols
-                readonly property int targetCellW: 190
-                readonly property int cols: Math.max(4, Math.min(5, Math.floor(width / targetCellW)))
-                readonly property int spacing: 16
-                readonly property int cellW: Math.floor((width - spacing * (cols - 1)) / cols)
+                Repeater {
+                    model: myListPage.filteredShows
 
-                cellWidth:  cellW + spacing
-                cellHeight: Math.round(cellW * 3 / 2) + 68   // 2:3 poster + ~56 px meta
-
-                model: myListPage.shows
-
-                delegate: Item {
-                    width:  showsGrid.cellWidth
-                    height: showsGrid.cellHeight
-
-                    AnimePosterCard {
-                        anchors {
-                            top:    parent.top
-                            left:   parent.left
-                            right:  parent.right
-                            rightMargin: showsGrid.spacing
-                            bottom: parent.bottom
+                    Item {
+                        width: {
+                            var availW = Math.max(400, resultsFlickable.width)
+                            var cols = Math.max(4, Math.min(5, Math.floor(availW / 190)))
+                            return Math.max(80, Math.floor((availW - 16 * (cols - 1)) / cols))
                         }
+                        height: width * 3 / 2 + 68
 
-                        posterUrl:  modelData.coverImage  || modelData.poster_url  || ""
-                        title:      modelData.title        || ""
-                        rating:     modelData.rating ? String(modelData.rating) : ""
-                        subtext:    "My List"
-                        epText:     ""
+                        AnimePosterCard {
+                            anchors.fill: parent
 
-                        onClicked: myListPage.seriesSelected(modelData.id)
+                            posterUrl:  modelData.cover_image_url || modelData.coverImage  || modelData.poster_url  || ""
+                            title:      modelData.title        || ""
+                            rating:     modelData.rating ? String(modelData.rating) : ""
+                            subtext:    ""
+                            currentStatus: modelData.userStatus || modelData.status || "Plan to Watch"
+                            epText:     ""
+
+                            onClicked: myListPage.seriesSelected(modelData.anilist_id || 0)
+                            
+                            onStatusChanged: function(newStatus) {
+                                if (authManager) {
+                                    authManager.updateShowStatus(String(modelData.anilist_id || modelData.id || 0), newStatus)
+                                }
+                            }
+                            
+                            onRemoveClicked: {
+                                if (authManager) {
+                                    authManager.removeShow(String(modelData.anilist_id || modelData.id || 0))
+                                }
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        // Empty state for filtered list
+        Text {
+            anchors {
+                top: headerCol.bottom
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            visible: myListPage.filteredShows.length === 0
+            text: myListPage.searchQuery ? "No results found for \"" + myListPage.searchQuery + "\"" : "No items found in \"" + myListPage.currentTab + "\"."
+            color: myListPage.clrMuted
+            font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 16 }
         }
     }
 }

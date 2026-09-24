@@ -16,7 +16,7 @@ Rectangle {
         Text {
             text: "Simulcasts"
             color: "white"
-            font.family: "Montserrat"
+            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 24
             font.bold: true
         }
@@ -65,6 +65,17 @@ Rectangle {
                                 : ""
                             posterUrl: modelData.cover_image_url || ""
                             onClicked: showSelected(String(modelData.id || ""), modelData.title || "Untitled")
+                            onAddClicked: {
+                                if (authManager) {
+                                    var item = {
+                                        "anilist_id": modelData.id || modelData.anilist_id,
+                                        "title": title,
+                                        "cover_image_url": posterUrl,
+                                        "rating": rating
+                                    };
+                                    authManager.addToLibrary(item);
+                                }
+                            }
                         }
                     }
                 }
