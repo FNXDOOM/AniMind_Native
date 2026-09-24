@@ -739,6 +739,7 @@ ApplicationWindow {
             source: active ? "pages/SearchPage.qml" : ""
             onLoaded: {
                 if (!item || !item.seriesClicked) return
+                if (item.initialQuery !== undefined) item.initialQuery = root.searchQuery
                 item.seriesClicked.connect(function(anilistId) {
                     root.currentSeriesId = anilistId
                     root.previousPage = root.currentPage

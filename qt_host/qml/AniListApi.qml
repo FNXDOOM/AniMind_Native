@@ -150,6 +150,8 @@ QtObject {
                 $sort: [MediaSort],
                 $season: MediaSeason,
                 $seasonYear: Int,
+                $format: MediaFormat,
+                $status: MediaStatus,
                 $averageScore_greater: Int
             ) {
                 Page(page: $page, perPage: $perPage) {
@@ -162,6 +164,8 @@ QtObject {
                         sort: $sort,
                         season: $season,
                         seasonYear: $seasonYear,
+                        format: $format,
+                        status: $status,
                         averageScore_greater: $averageScore_greater
                     ) {
                         ...MediaCard
@@ -187,11 +191,33 @@ QtObject {
         if (opts.genre   && opts.genre   !== "" && opts.genre !== "All Genres") vars.genre = opts.genre
         if (opts.season  && opts.season  !== "")  vars.season       = opts.season
         if (opts.seasonYear)                       vars.seasonYear   = opts.seasonYear
+        if (opts.format  && opts.format  !== "")   vars.format       = opts.format
+        if (opts.status  && opts.status  !== "")   vars.status       = opts.status
         if (minScore !== undefined)                vars.averageScore_greater = minScore
 
         query(gql, vars, function(data, err) {
             if (err) { callback([], null, err); return }
             callback(data.Page.media, data.Page.pageInfo, null)
+        })
+    }
+
+    // ── Character search (for the Characters tab) ────────────────
+    function searchCharacters(text, callback) {
+        var gql = "
+            query Chars($search: String) {
+                Page(page: 1, perPage: 20) {
+                    characters(search: $search, sort: FAVOURITES_DESC) {
+                        id
+                        name { full }
+                        image { medium }
+                        description(asHtml: false)
+                    }
+                }
+            }
+        "
+        query(gql, { search: text }, function(data, err) {
+            if (err) { callback([], err); return }
+            callback(data.Page.characters, null)
         })
     }
 
