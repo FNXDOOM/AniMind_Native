@@ -29,7 +29,7 @@ Item {
     readonly property color clrPrimary:     "#e6e6e6"
     readonly property color clrMuted:       "#b3b3b3"
     readonly property color clrOnSurface:   "#f2f2f2"
-    readonly property color clrOrange:      "#ffffff"
+    readonly property color clrAccent:      "#ffffff"
     readonly property color clrBorder:      "#141414"
     readonly property color clrSurface:     "#141414"
     readonly property color clrError:       "#ff6b6b"
@@ -164,8 +164,8 @@ Item {
             width: retryLabel.implicitWidth + 32
             radius: 8
             color: retryMa.pressed
-                   ? Qt.darker(root.clrOrange, 1.2)
-                   : (retryMa.containsMouse ? Qt.lighter(root.clrOrange, 1.1) : root.clrOrange)
+                   ? Qt.darker(root.clrAccent, 1.2)
+                   : (retryMa.containsMouse ? Qt.darker(root.clrAccent, 1.08) : root.clrAccent)
 
             Text {
                 id: retryLabel
@@ -242,8 +242,8 @@ Item {
             width: signInLabel.implicitWidth + 40
             radius: 10
             color: signInMa.pressed
-                   ? Qt.darker(root.clrOrange, 1.2)
-                   : (signInMa.containsMouse ? Qt.lighter(root.clrOrange, 1.1) : root.clrOrange)
+                   ? Qt.darker(root.clrAccent, 1.2)
+                   : (signInMa.containsMouse ? Qt.darker(root.clrAccent, 1.08) : root.clrAccent)
 
             Text {
                 id: signInLabel
@@ -415,7 +415,7 @@ Item {
                                     width: parent.width * (rowRoot.modelData.progress_pct || 0) / 100
                                     height: parent.height
                                     radius: 2
-                                    color: root.clrOrange
+                                    color: root.clrAccent
                                 }
                             }
                         }
