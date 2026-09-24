@@ -226,7 +226,7 @@ QtObject {
                         url
                         site
                     }
-                    characters(sort: ROLE, role: MAIN, page: 1, perPage: 6) {
+                    characters(sort: ROLE, role: MAIN, page: 1, perPage: 8) {
                         nodes {
                             name { full }
                             image { medium }
@@ -250,6 +250,10 @@ QtObject {
                                 id
                                 title { romaji english native }
                                 type
+                                format
+                                seasonYear
+                                averageScore
+                                coverImage { medium large }
                             }
                         }
                     }
