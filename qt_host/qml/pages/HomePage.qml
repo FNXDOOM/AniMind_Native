@@ -306,7 +306,17 @@ Rectangle {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickDeceleration: 3500
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+            implicitWidth: 6
+            contentItem: Rectangle {
+                radius: 3
+                color: "#3a3a3a"
+                opacity: parent.pressed ? 1 : 0.75
+                implicitWidth: 6
+            }
+            background: Item { }
+        }
 
         Column {
             id: pageCol
