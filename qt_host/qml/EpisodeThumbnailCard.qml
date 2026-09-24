@@ -42,7 +42,7 @@ Item {
             id: thumbClip
             anchors.fill: parent
             radius: 12
-            color: "#201f1f"
+            color: "#141414"
             clip: true
 
             Image {
@@ -113,7 +113,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: 2
-            color: "#353534"   // surface-container-highest
+            color: "#242424"   // surface-container-highest
 
             Rectangle {
                 width: parent.width * Math.max(0, Math.min(1, card.progress))
@@ -121,8 +121,8 @@ Item {
                 radius: 2
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "#ff6b00" }
-                    GradientStop { position: 1.0; color: "#6f00be" }
+                    GradientStop { position: 0.0; color: "#ffffff" }
+                    GradientStop { position: 1.0; color: "#3a3a3a" }
                 }
                 // Progress glow (stitch: shadow-[0_0_10px_rgba(255,107,0,0.8)])
                 layer.enabled: true
@@ -150,8 +150,8 @@ Item {
         Text {
             width: parent.width
             text: card.title
-            color: cardMa.containsMouse ? "#ffb693" : "#e5e2e1"
-            font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 15; weight: Font.DemiBold }
+            color: cardMa.containsMouse ? "#e6e6e6" : "#f2f2f2"
+            font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 15; weight: Font.DemiBold }
             elide: Text.ElideRight
             Behavior on color { ColorAnimation { duration: 200 } }
         }
@@ -160,7 +160,7 @@ Item {
             visible: card.episodeLabel !== ""
             width: parent.width
             text: card.episodeLabel
-            color: "#e2bfb0"
+            color: "#b3b3b3"
             font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 11; letterSpacing: 0.5 }
             elide: Text.ElideRight
         }

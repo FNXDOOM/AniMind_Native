@@ -60,11 +60,11 @@ Item {
     readonly property bool isAuthenticated: authManager ? authManager.authenticated : false
 
     // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color clrBackground: "#131313"
-    readonly property color clrPrimary:    "#ffb693"
-    readonly property color clrOnSurface:  "#e5e2e1"
-    readonly property color clrMuted:      "#e2bfb0"
-    readonly property color clrSurface:    "#1c1b1b"
+    readonly property color clrBackground: "#0a0a0a"
+    readonly property color clrPrimary:    "#e6e6e6"
+    readonly property color clrOnSurface:  "#f2f2f2"
+    readonly property color clrMuted:      "#b3b3b3"
+    readonly property color clrSurface:    "#141414"
 
     // ── Loading → empty timeout ───────────────────────────────────────────
     Timer {
@@ -132,7 +132,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Sign in to view your list"
                 color: myListPage.clrOnSurface
-                font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 22; weight: Font.DemiBold }
+                font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 22; weight: Font.DemiBold }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -256,7 +256,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Your list is empty — add some shows!"
                 color: myListPage.clrOnSurface
-                font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 20; weight: Font.DemiBold }
+                font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 20; weight: Font.DemiBold }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -302,7 +302,7 @@ Item {
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     text: "My List"
                     color: myListPage.clrOnSurface
-                    font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 28; weight: Font.Bold }
+                    font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 28; weight: Font.Bold }
                 }
 
                 TextField {
@@ -354,7 +354,7 @@ Item {
                             width: tabText.implicitWidth + 24
                             height: 36
                             radius: 8
-                            color: isSelected ? myListPage.clrPrimary : "#1c1b1b"
+                            color: isSelected ? myListPage.clrPrimary : "#141414"
                             border.color: isSelected ? myListPage.clrPrimary : "#2e2c2c"
                             border.width: 1
                             
@@ -374,7 +374,7 @@ Item {
                                     }
                                     return modelData + " (" + count + ")"
                                 }
-                                color: isSelected ? "#131313" : myListPage.clrMuted
+                                color: isSelected ? "#0a0a0a" : myListPage.clrMuted
                                 font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13; weight: isSelected ? Font.DemiBold : Font.Normal }
                             }
                             

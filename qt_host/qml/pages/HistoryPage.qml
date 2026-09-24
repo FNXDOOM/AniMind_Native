@@ -25,13 +25,13 @@ Item {
     property string errorText:      ""
 
     // ── Design tokens ──────────────────────────────────────────────────────
-    readonly property color clrBackground:  "#131313"
-    readonly property color clrPrimary:     "#ffb693"
-    readonly property color clrMuted:       "#e2bfb0"
-    readonly property color clrOnSurface:   "#e5e2e1"
-    readonly property color clrOrange:      "#ff6b00"
-    readonly property color clrBorder:      "#1c1b1b"
-    readonly property color clrSurface:     "#1c1b1b"
+    readonly property color clrBackground:  "#0a0a0a"
+    readonly property color clrPrimary:     "#e6e6e6"
+    readonly property color clrMuted:       "#b3b3b3"
+    readonly property color clrOnSurface:   "#f2f2f2"
+    readonly property color clrOrange:      "#ffffff"
+    readonly property color clrBorder:      "#141414"
+    readonly property color clrSurface:     "#141414"
     readonly property color clrError:       "#ff6b6b"
 
     // ── Background ─────────────────────────────────────────────────────────
@@ -200,7 +200,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "No watch history yet"
             color: root.clrOnSurface
-            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+            font.family: "Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 20
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
@@ -229,7 +229,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Sign in to see your watch history"
             color: root.clrOnSurface
-            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+            font.family: "Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 20
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
@@ -289,7 +289,7 @@ Item {
             }
             text: "Watch History"
             color: root.clrOnSurface
-            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+            font.family: "Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 26
             font.bold: true
         }
@@ -341,7 +341,7 @@ Item {
                         width: 80
                         height: 45
                         radius: 6
-                        color: "#2a2a2a"
+                        color: "#1e1e1e"
                         anchors.verticalCenter: parent.verticalCenter
                         clip: true
 
@@ -363,7 +363,7 @@ Item {
                             width: parent.width
                             text: rowRoot.modelData.show_title || ""
                             color: rowMa.containsMouse ? root.clrPrimary : root.clrOnSurface
-                            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                            font.family: "Segoe UI Variable Display, Segoe UI"
                             font.pixelSize: 14
                             font.bold: true
                             elide: Text.ElideRight
@@ -403,7 +403,7 @@ Item {
                             background: Rectangle {
                                 implicitWidth: 120
                                 implicitHeight: 4
-                                color: "#2a2a2a"
+                                color: "#1e1e1e"
                                 radius: 2
                             }
 

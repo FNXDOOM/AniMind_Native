@@ -73,7 +73,7 @@ Item {
                 )
 
         color:        Qt.rgba(0.075, 0.075, 0.075, 0.95)
-        border.color: "#1c1b1b"
+        border.color: "#141414"
         border.width: 1
         radius:       12
 
@@ -102,14 +102,14 @@ Item {
                 placeholderText: "Search anime…"
                 placeholderTextColor: "#6a5f5a"
 
-                color:             "#e5e2e1"
-                selectionColor:    "#ff6b00"
+                color:             "#f2f2f2"
+                selectionColor:    "#ffffff"
                 selectedTextColor: "#ffffff"
 
                 background: Rectangle {
                     color:        "#1a1919"
                     radius:       8
-                    border.color: searchInput.activeFocus ? "#ff6b00" : "#2e2c2c"
+                    border.color: searchInput.activeFocus ? "#ffffff" : "#2e2c2c"
                     border.width: 1
                 }
 
@@ -170,7 +170,7 @@ Item {
                 running: searchOverlay.isLoading
                 width:  40
                 height: 40
-                palette.dark: "#ff6b00"
+                palette.dark: "#ffffff"
             }
 
             // ── Idle / empty-state prompt ─────────────────────────────────
@@ -181,7 +181,7 @@ Item {
                 visible: searchOverlay.searchQuery.length < 2 && !searchOverlay.isLoading && searchOverlay.errorText.length === 0
 
                 text:  "Type at least 2 characters to search"
-                color: "#e2bfb0"
+                color: "#b3b3b3"
                 font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
                 topPadding: 8
                 bottomPadding: 8
@@ -197,7 +197,7 @@ Item {
                       && searchOverlay.errorText.length === 0
 
                 text:  'No results for "' + searchOverlay.searchQuery + '"'
-                color: "#e2bfb0"
+                color: "#b3b3b3"
                 font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
                 topPadding: 8
                 bottomPadding: 8

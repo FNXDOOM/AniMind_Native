@@ -16,7 +16,7 @@ Rectangle {
         Text {
             text: "Simulcasts"
             color: "white"
-            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+            font.family: "Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 24
             font.bold: true
         }

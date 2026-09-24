@@ -111,6 +111,7 @@ ApplicationWindow {
     property bool   isPlaying:      false
     property var    audioTracks:    []
     property var    subtitleTracks: []
+    property var    videoTracks:    []
     property int    currentAudioId: -1
     property int    currentSubId:   -1
     property string showTitle:         "Animind Player"
@@ -170,19 +171,22 @@ ApplicationWindow {
 
     function refreshTracks() {
         var count = video.getPropertyDouble("track-list/count")
-        var na = [], ns = []
+        var na = [], ns = [], nv = []
         for (var i = 0; i < count; i++) {
             var type = video.getPropertyString("track-list/" + i + "/type")
             var tid  = video.getPropertyDouble("track-list/" + i + "/id")
             var lang = video.getPropertyString("track-list/" + i + "/lang")
             var ttl  = video.getPropertyString("track-list/" + i + "/title")
             var lbl  = ttl || lang || (type === "audio" ? "Audio " + tid : "Sub " + tid)
+            var hgt = video.getPropertyDouble("track-list/" + i + "/height")
             if      (type === "audio") na.push({id: tid, label: lbl})
             else if (type === "sub")   ns.push({id: tid, label: lbl})
+            else if (type === "video") nv.push({id: tid, label: hgt > 0 ? (hgt + "p") : ("Track " + tid)})
         }
         ns.unshift({id: 0, label: "Off"})
         audioTracks    = na
         subtitleTracks = ns
+        videoTracks    = nv
         currentAudioId = video.getPropertyDouble("aid")
         currentSubId   = video.getPropertyDouble("sid")
     }
@@ -1092,11 +1096,7 @@ ApplicationWindow {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter; anchors.left: seekBg.left
                     width: seekBar.value * seekBg.width; height: 4; radius: 2
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: root.accentOrange }
-                        GradientStop { position: 1.0; color: root.accentPurple }
-                    }
+                    color: "#f5f5f5"
                 }
                 Slider {
                     id: seekBar
@@ -1133,7 +1133,7 @@ ApplicationWindow {
                     layer.enabled: true
                     layer.effect: MultiEffect {
                         shadowEnabled: true
-                        shadowColor:   Qt.rgba(1, 0.42, 0, 0.35)
+                        shadowColor:   Qt.rgba(0, 0, 0, 0.55)
                         shadowBlur:    0.9
                         shadowHorizontalOffset: 0
                         shadowVerticalOffset:   2
@@ -1199,7 +1199,7 @@ ApplicationWindow {
                                 width: parent.width * volSlider.value
                                 height: parent.height
                                 radius: parent.radius
-                                color: "#ff6b00"
+                                color: "#ffffff"
                             }
                         }
 
@@ -1233,6 +1233,58 @@ ApplicationWindow {
             Row {
                 anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 16 }
                 spacing: 6
+
+                // Quality — only appears when the source really has several
+                // video tracks, so it is never a control that does nothing.
+                Rectangle {
+                    id: qualityBtn
+                    visible: root.videoTracks.length > 1
+                    width: qRow.implicitWidth + 20; height: 32; radius: 6
+                    color: qMa.containsMouse ? Qt.rgba(1,1,1,0.16) : Qt.rgba(1,1,1,0.08)
+                    border.color: qualityBtn.activeFocus ? "#ffffff" : "transparent"
+                    border.width: 1
+                    activeFocusOnTab: true
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Row {
+                        id: qRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Quality"
+                            color: "#ffffff"
+                            font.family: root.bodyFont; font.pixelSize: 12
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: ""
+                            color: "#b3b3b3"
+                            font.family: root.iconFont; font.pixelSize: 9
+                        }
+                    }
+                    MouseArea {
+                        id: qMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: { qualityBtn.forceActiveFocus(); qualityMenu.open() }
+                    }
+                    Menu {
+                        id: qualityMenu
+                        title: "Quality"
+                        Repeater {
+                            model: root.videoTracks
+                            MenuItem {
+                                required property var modelData
+                                text: modelData.label
+                                onTriggered: {
+                                    root.refreshTracks()
+                                    video.command(["set", "vid", modelData.id.toString()])
+                                }
+                            }
+                        }
+                    }
+                }
 
                 PlayerIconBtn {
                     glyph: "CC"; tip: "Subtitles / CC"

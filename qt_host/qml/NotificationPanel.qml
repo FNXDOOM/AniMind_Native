@@ -20,10 +20,10 @@ Rectangle {
     signal closeRequested()
 
     // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color clrPrimary:   "#ffb693"
-    readonly property color clrMuted:     "#e2bfb0"
-    readonly property color clrOnSurface: "#e5e2e1"
-    readonly property color clrBorder:    "#1c1b1b"
+    readonly property color clrPrimary:   "#e6e6e6"
+    readonly property color clrMuted:     "#b3b3b3"
+    readonly property color clrOnSurface: "#f2f2f2"
+    readonly property color clrBorder:    "#141414"
 
     // ── Geometry ──────────────────────────────────────────────────────────
     width:  Math.max(280, contentColumn.implicitWidth + 32)
@@ -56,7 +56,7 @@ Rectangle {
             text: "Notifications"
             color: notificationPanel.clrPrimary
             font {
-                family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                family: "Segoe UI Variable Display, Segoe UI"
                 pixelSize: 14
                 weight:    Font.DemiBold
             }
