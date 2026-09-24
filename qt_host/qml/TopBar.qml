@@ -100,7 +100,8 @@ Item {
                     { id: "search",    label: "Search",   icon: "\u2315" },
                     { id: "trending",  label: "Trending", icon: "\u2197" },
                     { id: "simulcast", label: "My Shows", icon: "\uD83D\uDCFA" },
-                    { id: "mylist",    label: "My Lists", icon: "\u2630" }
+                    { id: "mylist",    label: "My Lists", icon: "\u2630" },
+                    { id: "history",   label: "History",  icon: "\u23f2" }
                 ]
 
                 delegate: Item {

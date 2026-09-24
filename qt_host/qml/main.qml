@@ -33,7 +33,7 @@ ApplicationWindow {
     // Pages: "home" | "browse" | "simulcast" | "simulcastDetail" | "mylist" | "history" | "settings" | "player"
     property string currentPage: "home"
     property string previousPage: "home"
-    property int currentSeriesId: 0
+    property var currentSeriesId: 0
     property string currentCloudShowId: ""
     property string currentCloudShowTitle: ""
     readonly property bool inPlayer: currentPage === "player"
@@ -407,6 +407,12 @@ ApplicationWindow {
                     root.previousPage = root.currentPage
                     root.currentPage = "detail"
                 })
+                if (item.trendingSeeAllRequested) {
+                    item.trendingSeeAllRequested.connect(function() {
+                        root.previousPage = root.currentPage
+                        root.currentPage = "trending"
+                    })
+                }
             }
         }
         Loader {
@@ -530,6 +536,7 @@ ApplicationWindow {
                     return
                 item.seriesSelected.connect(function(anilistId) {
                     root.currentSeriesId = anilistId
+                    root.previousPage = root.currentPage
                     root.currentPage = "detail"
                 })
             }
@@ -681,7 +688,7 @@ ApplicationWindow {
         id: playFlash
         anchors.centerIn: parent
         width: 80; height: 80; radius: 40
-        color: "#99000000"; visible: false; opacity: 0; z: 5
+        color: "#99000000"; visible: false; z: 5
         Text {
             anchors.centerIn: parent
             text: root.isPlaying ? "\u23f8" : "\u25b6"
@@ -912,7 +919,7 @@ ApplicationWindow {
                     handle: Rectangle {
                         x: seekBar.leftPadding + seekBar.visualPosition * (seekBar.availableWidth - width)
                         y: seekBar.topPadding + seekBar.availableHeight / 2 - height / 2
-                        width:  (seekBar.pressed || seekHov.containsMouse) ? 16 : 0
+                        width:  (seekBar.pressed || seekHov.hovered) ? 16 : 0
                         height: width; radius: width / 2; color: "white"
                         Behavior on width { NumberAnimation { duration: 120 } }
                     }
