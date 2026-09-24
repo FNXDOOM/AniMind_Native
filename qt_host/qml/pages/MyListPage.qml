@@ -59,6 +59,18 @@ Item {
 
     readonly property bool isAuthenticated: authManager ? authManager.authenticated : false
 
+    // The watchlist rows carry no watched/total episode count, so this shows
+    // only what is actually stored rather than inventing a progress figure.
+    function showMeta(item) {
+        if (!item) return ""
+        var bits = []
+        var st = item.userStatus || item.status || ""
+        if (st) bits.push(st)
+        if (item.seasonYear) bits.push(String(item.seasonYear))
+        else if (item.episode_count) bits.push(item.episode_count + " eps")
+        return bits.join("  •  ")
+    }
+
     // ── Design tokens ─────────────────────────────────────────────────────
     readonly property color clrBackground: "#0a0a0a"
     readonly property color clrPrimary:    "#e6e6e6"
@@ -429,7 +441,7 @@ Item {
                             posterUrl:  modelData.cover_image_url || modelData.coverImage  || modelData.poster_url  || ""
                             title:      modelData.title        || ""
                             rating:     modelData.rating ? String(modelData.rating) : ""
-                            subtext:    ""
+                            subtext:    myListPage.showMeta(modelData)
                             currentStatus: modelData.userStatus || modelData.status || "Plan to Watch"
                             epText:     ""
 
