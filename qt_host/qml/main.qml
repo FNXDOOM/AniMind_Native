@@ -881,7 +881,8 @@ ApplicationWindow {
         color: "#99000000"; visible: false; z: 5
         Text {
             anchors.centerIn: parent
-            text: root.isPlaying ? "\u23f8" : "\u25b6"
+            text: root.isPlaying ? "\uE103" : "\uE102"
+            font.family: root.iconFont
             color: "white"; font.pixelSize: 34
         }
         function show() { visible = true; pfAnim.restart() }
@@ -906,7 +907,7 @@ ApplicationWindow {
         Behavior on color { ColorAnimation { duration: 150 } }
         Row {
             id: skipRow; anchors.centerIn: parent; spacing: 8
-            Text { text: "\u23ed"; color: "white"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: "\uE101"; color: "white"; font.pixelSize: 15; font.family: root.iconFont; anchors.verticalCenter: parent.verticalCenter }
             Text { text: "Skip Intro"; color: "white"; font.pixelSize: 14; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
         }
         MouseArea { id: skipMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: skipIntroBtn.visible = false }
@@ -1140,15 +1141,16 @@ ApplicationWindow {
                     }
                     Text {
                         anchors.centerIn: parent
-                        text: root.isPlaying ? "\u23f8" : "\u25b6"
+                        text: root.isPlaying ? "\uE103" : "\uE102"
                         color: "#111111"; font.pixelSize: 17
+                        font.family: root.iconFont
                     }
                     MouseArea { id: playMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: { video.command(["cycle","pause"]); root.isPlaying = !root.isPlaying } }
                 }
 
-                PlayerIconBtn { glyph: "\u23ee"; tip: "Previous Episode"; onClicked: {} }
-                PlayerIconBtn { glyph: "\u23ed"; tip: "Next Episode";     onClicked: {} }
+                PlayerIconBtn { glyph: "\uE100"; glyphIcon: true; tip: "Previous Episode"; onClicked: {} }
+                PlayerIconBtn { glyph: "\uE101"; glyphIcon: true; tip: "Next Episode";     onClicked: {} }
 
                 // Volume (to the right of forward button)
                 Item {
@@ -1159,7 +1161,7 @@ ApplicationWindow {
                         height: 36
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        glyph: volSlider.value === 0 ? "\ud83d\udd07" : (volSlider.value < 0.5 ? "\ud83d\udd09" : "\ud83d\udd0a")
+                        glyph: volSlider.value === 0 ? "\uE74F" : "\uE767"; glyphIcon: true
                         onClicked: {
                             if (volSlider.value > 0) {
                                 volSlider.value = 0
@@ -1257,7 +1259,7 @@ ApplicationWindow {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: ""
+                            text: "\uE70D"
                             color: "#b3b3b3"
                             font.family: root.iconFont; font.pixelSize: 9
                         }
@@ -1323,7 +1325,7 @@ ApplicationWindow {
                     color: epMa.containsMouse ? "#55FFFFFF" : "#33FFFFFF"
                     Behavior on color { ColorAnimation { duration: 120 } }
                     Row { id: epRow; anchors.centerIn: parent; spacing: 6
-                        Text { text: "\ud83d\udcc2"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "\uE8FD"; font.family: root.iconFont; color: "white"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         Text { text: "Episodes"; color: "white"; font.pixelSize: 13; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
                     }
                     MouseArea { id: epMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: fileDialog.open() }
@@ -1333,7 +1335,7 @@ ApplicationWindow {
                     width: 36; height: 36; radius: 18; color: fsMa.containsMouse ? "#33FFFFFF" : "#14000000"
                     border.color: "#33FFFFFF"; border.width: 1; Behavior on color { ColorAnimation { duration: 120 } }
                     scale: fsMa.pressed ? 0.88 : 1.0; Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutBack } }
-                    Text { anchors.centerIn: parent; text: root.visibility === Window.FullScreen ? "\u29c6" : "\u29c6"; color: "white"; font.pixelSize: 14 }
+                    Text { anchors.centerIn: parent; text: root.visibility === Window.FullScreen ? "\uE73F" : "\uE740"; font.family: root.iconFont; color: "white"; font.pixelSize: 14 }
                     MouseArea { id: fsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: root.visibility === Window.FullScreen ? root.showNormal() : root.showFullScreen() }
                 }
@@ -1345,6 +1347,7 @@ ApplicationWindow {
         id: pib
         width: 36; height: 36
         property string glyph: ""
+        property bool   glyphIcon: false
         property string tip:   ""
         signal clicked()
         Rectangle {
@@ -1353,7 +1356,13 @@ ApplicationWindow {
             border.color: "#33FFFFFF"; border.width: 1
             Behavior on color { ColorAnimation { duration: 120 } }
         }
-        Text { anchors.centerIn: parent; text: pib.glyph; color: "white"; font.pixelSize: 14 }
+        Text {
+            anchors.centerIn: parent
+            text: pib.glyph
+            color: "white"
+            font.pixelSize: 14
+            font.family: pib.glyphIcon ? root.iconFont : root.bodyFont
+        }
         MouseArea { id: pibMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pib.clicked() }
         ToolTip.text: pib.tip; ToolTip.visible: pibMa.containsMouse && pib.tip !== ""
     }

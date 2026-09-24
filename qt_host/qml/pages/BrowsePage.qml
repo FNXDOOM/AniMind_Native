@@ -171,7 +171,7 @@ Rectangle {
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: ""
+                        text: "\uE76C"
                         color: viewAllMa.containsMouse ? "#ffffff" : "#8a8a8a"
                         font.family: browsePage.iconFont
                         font.pixelSize: 11

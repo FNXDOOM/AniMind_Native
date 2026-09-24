@@ -206,7 +206,7 @@ Rectangle {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: arrow.modelData === "left" ? "" : ""
+                                text: arrow.modelData === "left" ? "\uE76B" : "\uE76C"
                                 color: "#c8c8dc"; font.pixelSize: 11
                                 font.family: homePage.iconFont
                             }
