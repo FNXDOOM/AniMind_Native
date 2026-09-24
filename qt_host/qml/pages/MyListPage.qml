@@ -9,9 +9,9 @@ import "../"
 //
 // State logic (direct visible bindings, no QML State objects needed):
 //   unauthenticated : !authManager || !authManager.authenticated
-//   loading         : authenticated && shows.length === 0 && !emptyStateVisible
-//   empty           : authenticated && shows.length === 0 && emptyStateVisible  (set by 5-s timer)
-//   results         : shows.length > 0
+//   loading         : authenticated && (shows || []).length === 0 && !emptyStateVisible
+//   empty           : authenticated && (shows || []).length === 0 && emptyStateVisible  (set by 5-s timer)
+//   results         : (shows || []).length > 0
 
 Item {
     id: myListPage
@@ -21,7 +21,7 @@ Item {
 
     // ── Data binding ──────────────────────────────────────────────────────
     // Automatically updates whenever authManager.libraryShowsChanged is emitted
-    property var shows: authManager ? authManager.libraryShows : []
+    property var shows: (authManager && authManager.libraryShows) ? authManager.libraryShows : []
 
     property string currentTab: "All"
     property string searchQuery: ""
@@ -29,7 +29,7 @@ Item {
     property var filteredShows: {
         var result = []
         var searchLower = searchQuery.toLowerCase().trim()
-        var src = shows
+        var src = myListPage.shows || []
         for (var i = 0; i < src.length; ++i) {
             var item = src[i]
             var status = item.userStatus || item.status || "Plan to Watch"
@@ -72,14 +72,14 @@ Item {
         interval: 5000
         repeat: false
         onTriggered: {
-            if (myListPage.shows.length === 0) {
+            if ((myListPage.shows || []).length === 0) {
                 myListPage.emptyStateVisible = true
             }
         }
     }
 
     onIsAuthenticatedChanged: {
-        if (isAuthenticated && shows.length === 0) {
+        if (isAuthenticated && (shows || []).length === 0) {
             emptyStateVisible = false
             emptyTimeout.restart()
         } else {
@@ -95,7 +95,7 @@ Item {
     }
 
     onVisibleChanged: {
-        if (visible && isAuthenticated && shows.length === 0) {
+        if (visible && isAuthenticated && (shows || []).length === 0) {
             emptyStateVisible = false
             emptyTimeout.restart()
         } else if (!visible) {
@@ -189,7 +189,7 @@ Item {
     Item {
         anchors.fill: parent
         visible: myListPage.isAuthenticated
-                 && myListPage.shows.length === 0
+                 && (myListPage.shows || []).length === 0
                  && !myListPage.emptyStateVisible
 
         Column {
@@ -237,7 +237,7 @@ Item {
     Item {
         anchors.fill: parent
         visible: myListPage.isAuthenticated
-                 && myListPage.shows.length === 0
+                 && (myListPage.shows || []).length === 0
                  && myListPage.emptyStateVisible
 
         Column {
@@ -279,7 +279,7 @@ Item {
     // ─────────────────────────────────────────────────────────────────────
     Item {
         anchors.fill: parent
-        visible: myListPage.shows.length > 0
+        visible: (myListPage.shows || []).length > 0
 
         // Page header with Tabs and Search
         ColumnLayout {
@@ -365,7 +365,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: {
                                     var count = 0;
-                                    var src = myListPage.shows;
+                                    var src = myListPage.shows || [];
                                     for (var i = 0; i < src.length; ++i) {
                                         var status = src[i].userStatus || src[i].status || "Plan to Watch";
                                         if (modelData === "All" || status === modelData) {
@@ -462,7 +462,7 @@ Item {
             }
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            visible: myListPage.filteredShows.length === 0
+            visible: (myListPage.filteredShows || []).length === 0
             text: myListPage.searchQuery ? "No results found for \"" + myListPage.searchQuery + "\"" : "No items found in \"" + myListPage.currentTab + "\"."
             color: myListPage.clrMuted
             font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 16 }
