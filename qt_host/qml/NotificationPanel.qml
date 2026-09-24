@@ -56,7 +56,7 @@ Rectangle {
             text: "Notifications"
             color: notificationPanel.clrPrimary
             font {
-                family:    "Montserrat"
+                family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
                 pixelSize: 14
                 weight:    Font.DemiBold
             }
@@ -82,7 +82,7 @@ Rectangle {
                 color:           notificationPanel.clrOnSurface
                 horizontalAlignment: Text.AlignHCenter
                 font {
-                    family:    "Inter"
+                    family: "Segoe UI Variable Text, Segoe UI"
                     pixelSize: 13
                     weight:    Font.Normal
                 }
@@ -94,7 +94,7 @@ Rectangle {
                 color:           notificationPanel.clrMuted
                 horizontalAlignment: Text.AlignHCenter
                 font {
-                    family:    "Inter"
+                    family: "Segoe UI Variable Text, Segoe UI"
                     pixelSize: 11
                     weight:    Font.Normal
                 }
@@ -111,7 +111,7 @@ Rectangle {
                 text:  modelData.message || ""
                 color: notificationPanel.clrOnSurface
                 font {
-                    family:    "Inter"
+                    family: "Segoe UI Variable Text, Segoe UI"
                     pixelSize: 13
                 }
                 wrapMode: Text.WordWrap

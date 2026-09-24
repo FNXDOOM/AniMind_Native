@@ -41,7 +41,7 @@ Rectangle {
         Text {
             text: "Trending Now"
             color: "white"
-            font.family: "Montserrat"
+            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 26
             font.bold: true
         }

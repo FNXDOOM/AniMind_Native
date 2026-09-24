@@ -35,13 +35,13 @@ Item {
             Layout.fillWidth: true
             text: scrollRow.sectionTitle
             color: "white"
-            font { family: "Montserrat"; pixelSize: 20; weight: Font.DemiBold }
+            font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 20; weight: Font.DemiBold }
         }
 
         Text {
             text: "View All"
             color: "#ffb693"
-            font { family: "Inter"; pixelSize: 12; letterSpacing: 0.5 }
+            font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 12; letterSpacing: 0.5 }
 
             MouseArea {
                 anchors.fill: parent

@@ -77,7 +77,7 @@ Rectangle {
         Text {
             text: "Popular This Season"
             color: "white"
-            font.family: "Montserrat"
+            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 24
             font.bold: true
         }

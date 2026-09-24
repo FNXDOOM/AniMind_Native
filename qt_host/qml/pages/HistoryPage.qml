@@ -150,7 +150,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.errorText
             color: root.clrError
-            font.family: "Inter"
+            font.family: "Segoe UI Variable Text, Segoe UI"
             font.pixelSize: 14
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignHCenter
@@ -172,7 +172,7 @@ Item {
                 anchors.centerIn: parent
                 text: "Retry"
                 color: "white"
-                font.family: "Inter"
+                font.family: "Segoe UI Variable Text, Segoe UI"
                 font.pixelSize: 14
                 font.bold: true
             }
@@ -200,7 +200,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "No watch history yet"
             color: root.clrOnSurface
-            font.family: "Montserrat"
+            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 20
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
@@ -210,7 +210,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Watch something to start building your history."
             color: root.clrMuted
-            font.family: "Inter"
+            font.family: "Segoe UI Variable Text, Segoe UI"
             font.pixelSize: 13
             horizontalAlignment: Text.AlignHCenter
         }
@@ -229,7 +229,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Sign in to see your watch history"
             color: root.clrOnSurface
-            font.family: "Montserrat"
+            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 20
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
@@ -250,7 +250,7 @@ Item {
                 anchors.centerIn: parent
                 text: "Sign In"
                 color: "white"
-                font.family: "Inter"
+                font.family: "Segoe UI Variable Text, Segoe UI"
                 font.pixelSize: 15
                 font.bold: true
             }
@@ -289,7 +289,7 @@ Item {
             }
             text: "Watch History"
             color: root.clrOnSurface
-            font.family: "Montserrat"
+            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 26
             font.bold: true
         }
@@ -363,7 +363,7 @@ Item {
                             width: parent.width
                             text: rowRoot.modelData.show_title || ""
                             color: rowMa.containsMouse ? root.clrPrimary : root.clrOnSurface
-                            font.family: "Montserrat"
+                            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
                             font.pixelSize: 14
                             font.bold: true
                             elide: Text.ElideRight
@@ -374,7 +374,7 @@ Item {
                             width: parent.width
                             text: rowRoot.modelData.episode_label || ""
                             color: root.clrMuted
-                            font.family: "Inter"
+                            font.family: "Segoe UI Variable Text, Segoe UI"
                             font.pixelSize: 12
                             elide: Text.ElideRight
                         }
@@ -383,7 +383,7 @@ Item {
                             width: parent.width
                             text: root.relativeTime(rowRoot.modelData.last_watched || "")
                             color: Qt.rgba(0.886, 0.749, 0.690, 0.6)
-                            font.family: "Inter"
+                            font.family: "Segoe UI Variable Text, Segoe UI"
                             font.pixelSize: 11
                         }
                     }
@@ -424,7 +424,7 @@ Item {
                             width: parent.width
                             text: (rowRoot.modelData.progress_pct || 0) + "%"
                             color: root.clrMuted
-                            font.family: "Inter"
+                            font.family: "Segoe UI Variable Text, Segoe UI"
                             font.pixelSize: 10
                             horizontalAlignment: Text.AlignRight
                         }

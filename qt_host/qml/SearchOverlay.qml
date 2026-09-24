@@ -113,7 +113,7 @@ Item {
                     border.width: 1
                 }
 
-                font.family:   "Inter"
+                font.family: "Segoe UI Variable Text, Segoe UI"
                 font.pixelSize: 15
                 leftPadding:   12
                 rightPadding:  12
@@ -182,7 +182,7 @@ Item {
 
                 text:  "Type at least 2 characters to search"
                 color: "#e2bfb0"
-                font { family: "Inter"; pixelSize: 13 }
+                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
                 topPadding: 8
                 bottomPadding: 8
             }
@@ -198,7 +198,7 @@ Item {
 
                 text:  'No results for "' + searchOverlay.searchQuery + '"'
                 color: "#e2bfb0"
-                font { family: "Inter"; pixelSize: 13 }
+                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
                 topPadding: 8
                 bottomPadding: 8
             }
@@ -211,7 +211,7 @@ Item {
 
                 text:  searchOverlay.errorText
                 color: "#ff6b6b"
-                font { family: "Inter"; pixelSize: 13 }
+                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
                 wrapMode: Text.Wrap
                 width: parent.width
                 topPadding: 8

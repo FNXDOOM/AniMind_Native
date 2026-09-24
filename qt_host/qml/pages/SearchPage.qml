@@ -93,7 +93,7 @@ Rectangle {
         Text {
             text: "SEARCH ANIME"
             color: "#f0f0f5"
-            font.family: "Montserrat"
+            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 32
             font.weight: Font.Bold
             font.letterSpacing: 1.28
@@ -131,7 +131,7 @@ Rectangle {
                     color: "#f0f0f5"
                     selectionColor: "#f47521"
                     selectedTextColor: "#ffffff"
-                    font.family: "Inter"
+                    font.family: "Segoe UI Variable Text, Segoe UI"
                     font.pixelSize: 15
                     clip: true
                     text: searchPage.searchQuery
@@ -142,7 +142,7 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         text: "Search by title, genre..."
                         color: "#8888a0"
-                        font.family: "Inter"
+                        font.family: "Segoe UI Variable Text, Segoe UI"
                         font.pixelSize: 15
                         visible: searchInput.text.length === 0
                     }
@@ -182,7 +182,7 @@ Rectangle {
                     id: filterRowContent
                     anchors.centerIn: parent; spacing: 8
                     Text { text: "\u2261"; color: searchPage.showFilters ? "#f47521" : "#f0f0f5"; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
-                    Text { text: "Filters"; color: searchPage.showFilters ? "#f47521" : "#f0f0f5"; font.family: "Inter"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                    Text { text: "Filters"; color: searchPage.showFilters ? "#f47521" : "#f0f0f5"; font.family: "Segoe UI Variable Text, Segoe UI"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: searchPage.showFilters = !searchPage.showFilters }
             }
@@ -206,7 +206,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: modelData.label
                         color: searchPage.sortMode === sortBtn.sKey ? "#f47521" : "#8888a0"
-                        font.family: "Inter"; font.pixelSize: 13
+                        font.family: "Segoe UI Variable Text, Segoe UI"; font.pixelSize: 13
                         Behavior on color { ColorAnimation { duration: 150 } }
                     }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: searchPage.sortMode = sortBtn.sKey }
@@ -240,7 +240,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: modelData
                         color: searchPage.selectedGenre === genreChip.gName ? "#ffffff" : "#8888a0"
-                        font.family: "Inter"; font.pixelSize: 13; font.weight: Font.Medium
+                        font.family: "Segoe UI Variable Text, Segoe UI"; font.pixelSize: 13; font.weight: Font.Medium
                         Behavior on color { ColorAnimation { duration: 150 } }
                     }
                     MouseArea {
@@ -263,7 +263,7 @@ Rectangle {
                 return t
             }
             color: "#8888a0"
-            font.family: "Inter"; font.pixelSize: 13
+            font.family: "Segoe UI Variable Text, Segoe UI"; font.pixelSize: 13
             bottomPadding: 8
         }
     } // end headerCol
@@ -284,7 +284,7 @@ Rectangle {
         visible: !searchPage.isLoading && searchPage.errorText.length > 0
         text: searchPage.errorText
         color: "#ff6b6b"
-        font.family: "Inter"; font.pixelSize: 14
+        font.family: "Segoe UI Variable Text, Segoe UI"; font.pixelSize: 14
         wrapMode: Text.Wrap
         width: parent.width - 96
         horizontalAlignment: Text.AlignHCenter
@@ -304,7 +304,7 @@ Rectangle {
         Text {
             text: "No anime found. Try a different search."
             color: "#8888a0"
-            font.family: "Inter"; font.pixelSize: 15
+            font.family: "Segoe UI Variable Text, Segoe UI"; font.pixelSize: 15
             anchors.horizontalCenter: parent.horizontalCenter
         }
     }
@@ -318,7 +318,7 @@ Rectangle {
                  && searchPage.selectedGenre === ""
         text: "Type a title or pick a genre to search"
         color: "#44444f"
-        font.family: "Inter"; font.pixelSize: 15
+        font.family: "Segoe UI Variable Text, Segoe UI"; font.pixelSize: 15
     }
 
     // ── Results grid (Flickable fills space below headerCol) ──────────────

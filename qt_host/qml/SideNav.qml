@@ -71,7 +71,7 @@ Item {
                 text: "ANIMIND"
                 color: sideNav.clrPrimary
                 font {
-                    family: "Montserrat"
+                    family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
                     pixelSize: 26
                     weight: Font.Black
                     letterSpacing: -0.5
@@ -159,7 +159,7 @@ Item {
                                 authManager ? authManager.authenticated : false
                             )
                             color: sideNav.clrOnSurface
-                            font { family: "Inter"; pixelSize: 13; weight: Font.Medium }
+                            font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13; weight: Font.Medium }
                             elide: Text.ElideRight
 
                             ToolTip.visible: userNameMouse.containsMouse && userNameText.truncated
@@ -176,7 +176,7 @@ Item {
                         Text {
                             text: authManager && authManager.authenticated ? "Signed In" : "Not Signed In"
                             color: sideNav.clrSecondary
-                            font { family: "Inter"; pixelSize: 11 }
+                            font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 11 }
                         }
                     }
                 }
@@ -196,7 +196,7 @@ Item {
                               ? "Signing In..."
                               : (authManager && authManager.authenticated ? "Sign Out" : "Sign In with Browser")
                         color: sideNav.clrPrimary
-                        font { family: "Inter"; pixelSize: 12; weight: Font.DemiBold; letterSpacing: 0.7 }
+                        font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 12; weight: Font.DemiBold; letterSpacing: 0.7 }
                     }
 
                     MouseArea {
@@ -259,7 +259,7 @@ Item {
             Text {
                 text: navItem.icon
                 color: navItem.active ? navItem.clrPrimary : navItem.clrMuted
-                font { family: "Inter"; pixelSize: 20; weight: Font.DemiBold }
+                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 20; weight: Font.DemiBold }
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
 
@@ -267,7 +267,7 @@ Item {
                 Layout.fillWidth: true
                 text: navItem.label
                 color: navItem.active ? navItem.clrPrimary : navItem.clrMuted
-                font { family: "Montserrat"; pixelSize: 15; weight: navItem.active ? Font.DemiBold : Font.Normal }
+                font { family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"; pixelSize: 15; weight: navItem.active ? Font.DemiBold : Font.Normal }
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
         }
