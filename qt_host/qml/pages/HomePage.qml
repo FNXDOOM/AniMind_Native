@@ -17,6 +17,7 @@ Rectangle {
     signal playRequested(int id, string title)
     signal addToListRequested(int id)
     signal seriesClicked(int id)
+    signal trendingSeeAllRequested()
 
     function loadTrendingIfNeeded() {
         if (trendingList.length > 0 || loadingHero) return
@@ -33,7 +34,17 @@ Rectangle {
                 errorMsg = "No trending data returned"
             }
         })
-        AniListApi.seasonalAnime("SPRING", 2024, 12, function(list, err) {
+        // AniList seasons: Winter Dec-Feb, Spring Mar-May, Summer Jun-Aug, Fall Sep-Nov
+        var now   = new Date()
+        var month = now.getMonth()
+        var year  = now.getFullYear()
+        var season
+        if (month === 11)    { season = "WINTER"; year += 1 }
+        else if (month <= 1)   season = "WINTER"
+        else if (month <= 4)   season = "SPRING"
+        else if (month <= 7)   season = "SUMMER"
+        else                   season = "FALL"
+        AniListApi.seasonalAnime(season, year, 12, function(list, err) {
             if (!err && list && list.length > 0) simulcastList = list
         })
         AniListApi.airingNow(12, function(list, err) {
@@ -55,6 +66,8 @@ Rectangle {
         property var    rowModel:    []
         property string epTextMode:  "auto"   // "auto" | "ongoing"
         property int    listViewHeight: 360   // posterArea(270) + metaCol(~65) + padding(~25)
+
+        signal seeAllClicked()
 
         width: parent ? parent.width : 0
         spacing: 0
@@ -113,11 +126,21 @@ Rectangle {
                 spacing: 12
 
                 Text {
+                    id: seeAllTxt
                     visible: rowRoot.showSeeAll
                     text: "See All →"
                     color: "#f47521"
                     font.family: "Inter"; font.pixelSize: 13; font.weight: Font.DemiBold
                     anchors.verticalCenter: parent.verticalCenter
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onEntered: seeAllTxt.font.underline = true
+                        onExited:  seeAllTxt.font.underline = false
+                        onClicked: rowRoot.seeAllClicked()
+                    }
                 }
 
                 Row {
@@ -178,7 +201,21 @@ Rectangle {
                            : (AniListApi.isNewEpisode(modelData) ? "NEW EP"
                               : (modelData.episodes ? "EP " + modelData.episodes : ""))
                 posterUrl: AniListApi.cover(modelData)
+
                 onClicked: homePage.seriesClicked(modelData.id)
+                onWatchClicked: homePage.playRequested(modelData.id, title)
+
+                onAddClicked: {
+                    if (authManager) {
+                        var item = {
+                            "anilist_id": modelData.id || modelData.anilist_id,
+                            "title": title,
+                            "cover_image_url": posterUrl,
+                            "rating": rating
+                        };
+                        authManager.addToLibrary(item);
+                    }
+                }
             }
         }
     }
@@ -226,12 +263,13 @@ Rectangle {
 
                 // Loading pulse
                 Rectangle {
+                    id: heroPulse
                     anchors.centerIn: parent
                     width: 48; height: 48; radius: 24
                     color: "transparent"; border.color: "#f47521"; border.width: 2
                     visible: loadingHero && heroMedia === null
                     SequentialAnimation on opacity {
-                        running: parent.visible; loops: Animation.Infinite
+                        running: heroPulse.visible; loops: Animation.Infinite
                         NumberAnimation { to: 0.25; duration: 500; easing.type: Easing.InOutSine }
                         NumberAnimation { to: 1.0;  duration: 500; easing.type: Easing.InOutSine }
                     }
@@ -365,6 +403,7 @@ Rectangle {
                 showSeeAll:  true
                 rowModel:    homePage.trendingList
                 epTextMode:  "auto"
+                onSeeAllClicked: homePage.trendingSeeAllRequested()
             }
 
             Item { width: 1; height: 16 }
