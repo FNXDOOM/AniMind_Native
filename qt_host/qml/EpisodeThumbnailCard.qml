@@ -92,12 +92,12 @@ Item {
             }
         }
 
-        // Hover glow border (matches stitch group-hover:border-primary/50 + shadow)
+        // Hover ring
         Rectangle {
             anchors.fill: thumbClip
             radius: thumbClip.radius
             color: "transparent"
-            border.color: Qt.rgba(1, 0.714, 0.576, cardMa.containsMouse ? 0.5 : 0.0)
+            border.color: Qt.rgba(1, 1, 1, cardMa.containsMouse ? 0.55 : 0.0)
             border.width: 1
             Behavior on border.color { ColorAnimation { duration: 200 } }
         }

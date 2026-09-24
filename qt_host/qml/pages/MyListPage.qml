@@ -136,7 +136,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "\u2605"
-                color: Qt.rgba(1, 0.714, 0.576, 0.35)
+                color: Qt.rgba(1, 1, 1, 0.13)
                 font { pixelSize: 64 }
             }
 
@@ -164,12 +164,9 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: signInLabel.implicitWidth + 48
                 height: 44
-                radius: 10
-                color: signInMa.containsMouse
-                       ? Qt.rgba(1, 0.714, 0.576, 0.22)
-                       : Qt.rgba(1, 0.714, 0.576, 0.13)
-                border.color: Qt.rgba(1, 0.714, 0.576, 0.45)
-                border.width: 1
+                radius: 8
+                color: signInMa.containsMouse ? "#ffffff" : "#e6e6e6"
+                border.width: 0
 
                 Behavior on color { ColorAnimation { duration: 160 } }
 
@@ -177,7 +174,7 @@ Item {
                     id: signInLabel
                     anchors.centerIn: parent
                     text: authManager && authManager.signingIn ? "Signing In…" : "Sign In"
-                    color: myListPage.clrPrimary
+                    color: "#0a0a0a"
                     font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14; weight: Font.DemiBold; letterSpacing: 0.5 }
                 }
 
@@ -260,7 +257,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "\u2605"
-                color: Qt.rgba(1, 0.714, 0.576, 0.25)
+                color: Qt.rgba(1, 1, 1, 0.11)
                 font { pixelSize: 56 }
             }
 
