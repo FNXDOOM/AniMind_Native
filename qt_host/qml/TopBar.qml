@@ -3,7 +3,9 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// TopBar — fixed 64px glassmorphic top bar matching React UI
+// TopBar — 64px broadcast head bar.
+// Voice: Bahnschrift, uppercase, tracked. Active nav is an on-air underline,
+// not a filled pill, so the bar reads as a channel strip.
 Item {
     id: topBar
 
@@ -18,24 +20,23 @@ Item {
         ? notifIcon.mapToItem(null, notifIcon.width / 2, notifIcon.height / 2)
         : Qt.point(0, 0)
 
-    readonly property color clrSurface:   "#0a0a0f"
+    readonly property color clrSurface:   "#07070d"
     readonly property color clrPrimary:   "#f47521"
-    readonly property color clrMuted:     "#8888a0"
-    readonly property color clrOnSurface: "#f0f0f5"
+    readonly property color clrMuted:     "#9a9ab2"
+    readonly property color clrOnSurface: "#f2f2f7"
 
     height: 64
 
-    // ── Background ────────────────────────────────────────────────────────
+    // ── Background ───────────────────────────────────────────────────────
     Rectangle {
         id: barBg
         anchors.fill: parent
         gradient: Gradient {
             orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(0.039, 0.039, 0.059, 0.98) }
-            GradientStop { position: 1.0; color: Qt.rgba(0.039, 0.039, 0.059, 0.92) }
+            GradientStop { position: 0.0; color: Qt.rgba(0.027, 0.027, 0.051, 0.98) }
+            GradientStop { position: 1.0; color: Qt.rgba(0.027, 0.027, 0.051, 0.88) }
         }
 
-        // Bottom border line
         Rectangle {
             anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
             height: 1
@@ -43,12 +44,12 @@ Item {
         }
     }
 
-    // ── Content ───────────────────────────────────────────────────────────
+    // ── Content ──────────────────────────────────────────────────────────
     RowLayout {
-        anchors { fill: parent; leftMargin: 24; rightMargin: 24 }
-        spacing: 32
+        anchors { fill: parent; leftMargin: 28; rightMargin: 24 }
+        spacing: 28
 
-        // ── Logo ─────────────────────────────────────────────────────────
+        // ── Brand ────────────────────────────────────────────────────────
         Item {
             implicitWidth: logoRow.implicitWidth
             implicitHeight: 40
@@ -56,27 +57,35 @@ Item {
 
             Row {
                 id: logoRow
-                spacing: 8
+                spacing: 11
                 anchors.verticalCenter: parent.verticalCenter
 
                 Rectangle {
-                    width: 32; height: 32
-                    radius: 8
-                    color: topBar.clrPrimary
-
+                    width: 26; height: 26
+                    radius: 7
+                    anchors.verticalCenter: parent.verticalCenter
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "#f47521" }
+                        GradientStop { position: 1.0; color: "#b23a86" }
+                    }
                     Text {
                         anchors.centerIn: parent
                         anchors.horizontalCenterOffset: 1
-                        text: "\u25B6" // Play icon
+                        text: "\u25B6"
                         color: "white"
-                        font.pixelSize: 16
+                        font.pixelSize: 11
                     }
                 }
 
                 Text {
-                    text: "ANISTREAM"
-                    color: topBar.clrPrimary
-                    font { family: "Montserrat"; pixelSize: 22; weight: Font.Bold; letterSpacing: 1.1 }
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "ANIMIND"
+                    color: topBar.clrOnSurface
+                    font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                    font.pixelSize: 21
+                    font.weight: Font.Bold
+                    font.letterSpacing: 3.6
                 }
             }
 
@@ -87,94 +96,104 @@ Item {
             }
         }
 
-        Item { width: 16 } // Spacing
-
-        // ── Centre Nav Links ─────────────────────────────────────────────
+        // ── Nav ──────────────────────────────────────────────────────────
         Row {
-            spacing: 4
+            spacing: 22
             Layout.alignment: Qt.AlignVCenter
 
             Repeater {
                 model: [
-                    { id: "home",      label: "Home",     icon: "\u2302" },
-                    { id: "search",    label: "Search",   icon: "\u2315" },
-                    { id: "trending",  label: "Trending", icon: "\u2197" },
-                    { id: "simulcast", label: "My Shows", icon: "\uD83D\uDCFA" },
-                    { id: "mylist",    label: "My Lists", icon: "\u2630" },
-                    { id: "history",   label: "History",  icon: "\u23f2" }
+                    { id: "home",      label: "HOME" },
+                    { id: "search",    label: "SEARCH" },
+                    { id: "trending",  label: "TRENDING" },
+                    { id: "simulcast", label: "MY SHOWS" },
+                    { id: "mylist",    label: "MY LISTS" },
+                    { id: "history",   label: "HISTORY" }
                 ]
 
                 delegate: Item {
-                    width: navRow.implicitWidth + 32
+                    id: navItem
+                    width: navLabel.implicitWidth
                     height: 40
+                    activeFocusOnTab: true
 
-                    property bool isActive: topBar.currentPage === modelData.id
+                    readonly property bool isActive: topBar.currentPage === modelData.id
 
+                    Text {
+                        id: navLabel
+                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                        text: modelData.label
+                        color: navItem.isActive ? topBar.clrOnSurface
+                             : navMa.containsMouse ? "#c8c8dc"
+                             : topBar.clrMuted
+                        font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                        font.pixelSize: 13
+                        font.weight: navItem.isActive ? Font.Bold : Font.Normal
+                        font.letterSpacing: 1.9
+                        Behavior on color { ColorAnimation { duration: 160 } }
+                    }
+
+                    // On-air underline
                     Rectangle {
-                        anchors.fill: parent
-                        radius: 8
-                        color: isActive ? Qt.rgba(0.95, 0.46, 0.13, 0.1) : (navMa.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
-                        border.color: isActive ? Qt.rgba(0.95, 0.46, 0.13, 0.2) : "transparent"
-                        border.width: 1
-                        Behavior on color { ColorAnimation { duration: 200 } }
+                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                        height: 2; radius: 1
+                        color: topBar.clrPrimary
+                        visible: navItem.isActive
+                        scale: navItem.isActive ? 1.0 : 0.6
+                        Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
                     }
 
-                    Row {
-                        id: navRow
-                        anchors.centerIn: parent
-                        spacing: 8
-                        
-                        Text {
-                            text: modelData.icon
-                            color: isActive ? topBar.clrPrimary : topBar.clrMuted
-                            font { family: "Inter"; pixelSize: 16 }
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: modelData.label
-                            color: isActive ? topBar.clrPrimary : topBar.clrMuted
-                            font { family: "Inter"; pixelSize: 14; weight: Font.Medium }
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
+                    // Keyboard focus
+                    Rectangle {
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: -6 }
+                        height: 1
+                        color: "#f47521"
+                        visible: navItem.activeFocus
                     }
+
+                    Keys.onEnterPressed: topBar.navLinkClicked(modelData.id)
+                    Keys.onReturnPressed: topBar.navLinkClicked(modelData.id)
+                    Keys.onSpacePressed: topBar.navLinkClicked(modelData.id)
 
                     MouseArea {
                         id: navMa
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: topBar.navLinkClicked(modelData.id)
+                        onClicked: { navItem.forceActiveFocus(); topBar.navLinkClicked(modelData.id) }
                     }
                 }
             }
         }
 
-        Item { Layout.fillWidth: true }   // pushes icons to the right
+        Item { Layout.fillWidth: true }
 
-        // ── Right Side ───────────────────────────────────────────────────
+        // ── Right side ───────────────────────────────────────────────────
         Row {
-            spacing: 16
+            spacing: 14
             Layout.alignment: Qt.AlignVCenter
 
-            // Notifications
             Item {
                 id: notifIcon
-                width: 36; height: 36
+                width: 34; height: 34
                 anchors.verticalCenter: parent.verticalCenter
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 18
-                    color: notifMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+                    radius: 17
+                    color: notifMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                    border.color: topBar.clrMuted
+                    border.width: 1
+                    opacity: 0.9
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
                 Text {
                     anchors.centerIn: parent
-                    text: "\uD83D\uDD14"
+                    text: "\uEA8F"   // Segoe MDL2 Assets: ringer
                     color: notifMa.containsMouse ? topBar.clrPrimary : topBar.clrMuted
-                    font { family: "Inter"; pixelSize: 19 }
+                    font.family: "Segoe MDL2 Assets"
+                    font.pixelSize: 15
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
@@ -187,7 +206,6 @@ Item {
                 }
             }
 
-            // Profile / Sign In
             Loader {
                 anchors.verticalCenter: parent.verticalCenter
                 active: true
@@ -199,19 +217,18 @@ Item {
     Component {
         id: profileAvatar
         Item {
-            width: 36; height: 36
+            width: 34; height: 34
 
             Rectangle {
                 anchors.fill: parent
-                radius: 18
-                color: "#353534"
-                border.color: Qt.rgba(0.95, 0.46, 0.13, 0.25)
-                border.width: 1.5
+                radius: 17
+                color: "#22232e"
+                border.color: Qt.rgba(0.95, 0.46, 0.13, 0.45)
+                border.width: 1
 
                 Text {
                     anchors.centerIn: parent
                     text: {
-                        // Inline display name logic — avoids cross-file root reference
                         if (!authManager || !authManager.authenticated) return "?"
                         var em = authManager.email || ""
                         if (em.indexOf("@") !== -1) {
@@ -226,7 +243,9 @@ Item {
                         return "U"
                     }
                     color: topBar.clrPrimary
-                    font { pixelSize: 15; weight: Font.Bold }
+                    font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                    font.pixelSize: 15
+                    font.weight: Font.Bold
                 }
             }
 
@@ -249,19 +268,22 @@ Item {
     Component {
         id: signInBtn
         Rectangle {
-            width: btnText.implicitWidth + 32; height: 36
-            radius: 8
-            color: btnMa.containsMouse ? Qt.rgba(0.95, 0.46, 0.13, 0.2) : Qt.rgba(0.95, 0.46, 0.13, 0.1)
-            border.color: Qt.rgba(0.95, 0.46, 0.13, 0.3)
+            width: btnText.implicitWidth + 26; height: 32
+            radius: 4
+            color: btnMa.containsMouse ? Qt.rgba(0.95, 0.46, 0.13, 0.18) : "transparent"
+            border.color: Qt.rgba(0.95, 0.46, 0.13, 0.55)
             border.width: 1
             Behavior on color { ColorAnimation { duration: 150 } }
 
             Text {
                 id: btnText
                 anchors.centerIn: parent
-                text: (authManager && authManager.signingIn) ? "Signing In..." : "Sign In"
+                text: (authManager && authManager.signingIn) ? "SIGNING IN" : "SIGN IN"
                 color: topBar.clrPrimary
-                font { family: "Inter"; pixelSize: 14; weight: Font.DemiBold }
+                font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                font.pixelSize: 12
+                font.weight: Font.Bold
+                font.letterSpacing: 1.8
             }
 
             MouseArea {
