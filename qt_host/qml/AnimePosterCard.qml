@@ -57,7 +57,7 @@ Item {
             id: posterClip
             anchors.fill: parent
             radius: 10
-            color: "#101119"
+            color: "#141414"
             clip: true
             scale: cardMa.containsMouse ? 1.03 : 1.0
             Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
@@ -93,16 +93,16 @@ Item {
                     width: parent.width - 36
                     height: 30
                     radius: 5
-                    color: watchMa.containsMouse ? "#ff8434" : "#f47521"
+                    color: watchMa.containsMouse ? "#ffffff" : "#f5f5f5"
                     Behavior on color { ColorAnimation { duration: 120 } }
                     Text {
                         anchors.centerIn: parent
-                        text: "WATCH"
+                        text: "Play"
                         color: "white"
-                        font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
-                        font.pixelSize: 12
-                        font.weight: Font.Bold
-                        font.letterSpacing: 1.6
+                        font.family: "Segoe UI Variable Display, Segoe UI"
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 0
                     }
                     MouseArea {
                         id: watchMa
@@ -141,8 +141,8 @@ Item {
             anchors.margins: -1
             radius: 11
             color: "transparent"
-            border.color: cardMa.activeFocus ? "#f47521"
-                        : cardMa.containsMouse ? Qt.rgba(0.95, 0.46, 0.13, 0.5)
+            border.color: cardMa.activeFocus ? "#ffffff"
+                        : cardMa.containsMouse ? Qt.rgba(1, 1, 1, 0.45)
                         : Qt.rgba(1, 1, 1, 0.07)
             border.width: cardMa.activeFocus ? 2 : 1
             Behavior on border.color { ColorAnimation { duration: 160 } }
@@ -161,13 +161,13 @@ Item {
                 anchors.centerIn: parent
                 spacing: 4
                 Text {
-                    text: "\u2605"; color: "#f47521"; font.pixelSize: 9
+                    text: "\u2605"; color: "#ffffff"; font.pixelSize: 9
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
                     text: card.rating
                     color: "#f2f2f7"
-                    font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                    font.family: "Segoe UI Variable Display, Segoe UI"
                     font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 0.6
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -203,15 +203,15 @@ Item {
             height: 21; radius: 4
             width: epTxt.implicitWidth + 12
             readonly property bool isFresh: card.epText === "NEW EP"
-            color: isFresh ? "#f47521" : Qt.rgba(0.016, 0.016, 0.039, 0.78)
-            border.color: isFresh ? "#f47521" : Qt.rgba(1,1,1,0.10)
+            color: isFresh ? "#ffffff" : Qt.rgba(0, 0, 0, 0.62)
+            border.color: isFresh ? "#ffffff" : Qt.rgba(1,1,1,0.12)
             border.width: 1
             Text {
                 id: epTxt
                 anchors.centerIn: parent
                 text: card.epText
-                color: parent.isFresh ? "#0a0a12" : "#c8c8dc"
-                font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                color: parent.isFresh ? "#0a0a0a" : "#d4d4d4"
+                font.family: "Segoe UI Variable Display, Segoe UI"
                 font.pixelSize: 11; font.weight: Font.Bold; font.letterSpacing: 1.1
             }
         }
@@ -227,7 +227,7 @@ Item {
                 anchors.fill: parent
                 radius: 5
                 color: Qt.rgba(0.016, 0.016, 0.039, card.isDropdownOpen ? 0.97 : 0.86)
-                border.color: card.isDropdownOpen ? "#f47521" : Qt.rgba(1,1,1,0.16)
+                border.color: card.isDropdownOpen ? "#ffffff" : Qt.rgba(1,1,1,0.16)
                 border.width: 1
 
                 RowLayout {
@@ -238,7 +238,7 @@ Item {
                         Layout.fillWidth: true
                         text: card.currentStatus
                         color: "#f2f2f7"
-                        font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                        font.family: "Segoe UI Variable Display, Segoe UI"
                         font.pixelSize: 12; font.weight: Font.Bold; font.letterSpacing: 0.8
                         elide: Text.ElideRight
                     }
@@ -268,7 +268,7 @@ Item {
             }
             height: menuCol.implicitHeight + 8
             radius: 6
-            color: "#101119"
+            color: "#141414"
             border.color: Qt.rgba(1,1,1,0.12); border.width: 1
             clip: true
 
@@ -284,13 +284,13 @@ Item {
                         height: 28
                         radius: 4
                         color: statusMa.containsMouse ? "#1c1e2a"
-                             : (card.currentStatus === modelData ? Qt.rgba(0.95,0.46,0.13,0.18) : "transparent")
+                             : (card.currentStatus === modelData ? Qt.rgba(1,1,1,0.14) : "transparent")
 
                         Text {
                             anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                             text: modelData
-                            color: card.currentStatus === modelData ? "#f47521" : "#c8c8dc"
-                            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+                            color: card.currentStatus === modelData ? "#ffffff" : "#c8c8dc"
+                            font.family: "Segoe UI Variable Display, Segoe UI"
                             font.pixelSize: 12; font.letterSpacing: 0.6
                         }
 
@@ -321,8 +321,8 @@ Item {
             anchors { top: parent.top; left: parent.left; right: parent.right }
             height: 2 * lineHeight
             text: card.title
-            color: cardMa.containsMouse ? "#f47521" : "#f2f2f7"
-            font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+            color: cardMa.containsMouse ? "#ffffff" : "#f2f2f2"
+            font.family: "Segoe UI Variable Display, Segoe UI"
             font.pixelSize: 15
             font.weight: Font.DemiBold
             lineHeightMode: Text.FixedHeight

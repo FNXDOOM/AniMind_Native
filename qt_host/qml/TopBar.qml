@@ -1,300 +1,254 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Controls.Material
 import QtQuick.Layouts
 
-// TopBar — 64px broadcast head bar.
-// Voice: Bahnschrift, uppercase, tracked. Active nav is an on-air underline,
-// not a filled pill, so the bar reads as a channel strip.
+// TopBar — the content header. Desktop: global search pill, bell, avatar.
+// Compact: hamburger, brand, search icon, avatar. Primary navigation lives in
+// SideNav (or the bottom tab bar on phones).
 Item {
-    id: topBar
+    id: bar
 
     property string currentPage: "home"
+    property bool   compact:     false
+    property alias  query:       searchInput.text
+    readonly property bool searching: searchInput.text.length > 0
 
+    signal navLinkClicked(string page)
     signal searchClicked()
     signal notificationsClicked()
     signal profileClicked()
-    signal navLinkClicked(string page)
+    signal menuClicked()
+    signal querySubmitted(string text)
 
-    readonly property point notifIconCenter: notifIcon.visible
-        ? notifIcon.mapToItem(null, notifIcon.width / 2, notifIcon.height / 2)
+    readonly property point notifIconCenter: notifBtn.visible
+        ? notifBtn.mapToItem(null, notifBtn.width / 2, notifBtn.height / 2)
         : Qt.point(0, 0)
 
-    readonly property color clrSurface:   "#07070d"
-    readonly property color clrPrimary:   "#f47521"
-    readonly property color clrMuted:     "#9a9ab2"
-    readonly property color clrOnSurface: "#f2f2f7"
+    height: compact ? 56 : 64
 
-    height: 64
+    readonly property color field:    "#141414"
+    readonly property color hairline: "#262626"
+    readonly property color muted:    "#8a8a8a"
+    readonly property string font:    "Segoe UI Variable Text, Segoe UI"
+    readonly property string icons:   "Segoe MDL2 Assets"
 
-    // ── Background ───────────────────────────────────────────────────────
-    Rectangle {
-        id: barBg
-        anchors.fill: parent
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(0.027, 0.027, 0.051, 0.98) }
-            GradientStop { position: 1.0; color: Qt.rgba(0.027, 0.027, 0.051, 0.88) }
-        }
+    // ── Hamburger, compact only ──────────────────────────────────────────
+    Item {
+        id: menuBtn
+        visible: bar.compact
+        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 10 }
+        width: 40; height: 40
+        activeFocusOnTab: true
 
-        Rectangle {
-            anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-            height: 1
-            color: Qt.rgba(1, 1, 1, 0.07)
-        }
-    }
-
-    // ── Content ──────────────────────────────────────────────────────────
-    RowLayout {
-        anchors { fill: parent; leftMargin: 28; rightMargin: 24 }
-        spacing: 28
-
-        // ── Brand ────────────────────────────────────────────────────────
-        Item {
-            implicitWidth: logoRow.implicitWidth
-            implicitHeight: 40
-            Layout.alignment: Qt.AlignVCenter
-
-            Row {
-                id: logoRow
-                spacing: 11
-                anchors.verticalCenter: parent.verticalCenter
-
-                Rectangle {
-                    width: 26; height: 26
-                    radius: 7
-                    anchors.verticalCenter: parent.verticalCenter
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: "#f47521" }
-                        GradientStop { position: 1.0; color: "#b23a86" }
-                    }
-                    Text {
-                        anchors.centerIn: parent
-                        anchors.horizontalCenterOffset: 1
-                        text: "\u25B6"
-                        color: "white"
-                        font.pixelSize: 11
-                    }
-                }
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "ANIMIND"
-                    color: topBar.clrOnSurface
-                    font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
-                    font.pixelSize: 21
-                    font.weight: Font.Bold
-                    font.letterSpacing: 3.6
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: topBar.navLinkClicked("home")
-            }
-        }
-
-        // ── Nav ──────────────────────────────────────────────────────────
-        Row {
-            spacing: 22
-            Layout.alignment: Qt.AlignVCenter
-
+        // Three drawn bars instead of a font glyph: no icon-font dependency.
+        Column {
+            anchors.centerIn: parent
+            spacing: 4
             Repeater {
-                model: [
-                    { id: "home",      label: "HOME" },
-                    { id: "search",    label: "SEARCH" },
-                    { id: "trending",  label: "TRENDING" },
-                    { id: "simulcast", label: "MY SHOWS" },
-                    { id: "mylist",    label: "MY LISTS" },
-                    { id: "history",   label: "HISTORY" }
-                ]
-
-                delegate: Item {
-                    id: navItem
-                    width: navLabel.implicitWidth
-                    height: 40
-                    activeFocusOnTab: true
-
-                    readonly property bool isActive: topBar.currentPage === modelData.id
-
-                    Text {
-                        id: navLabel
-                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                        text: modelData.label
-                        color: navItem.isActive ? topBar.clrOnSurface
-                             : navMa.containsMouse ? "#c8c8dc"
-                             : topBar.clrMuted
-                        font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
-                        font.pixelSize: 13
-                        font.weight: navItem.isActive ? Font.Bold : Font.Normal
-                        font.letterSpacing: 1.9
-                        Behavior on color { ColorAnimation { duration: 160 } }
-                    }
-
-                    // On-air underline
-                    Rectangle {
-                        anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                        height: 2; radius: 1
-                        color: topBar.clrPrimary
-                        visible: navItem.isActive
-                        scale: navItem.isActive ? 1.0 : 0.6
-                        Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                    }
-
-                    // Keyboard focus
-                    Rectangle {
-                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: -6 }
-                        height: 1
-                        color: "#f47521"
-                        visible: navItem.activeFocus
-                    }
-
-                    Keys.onEnterPressed: topBar.navLinkClicked(modelData.id)
-                    Keys.onReturnPressed: topBar.navLinkClicked(modelData.id)
-                    Keys.onSpacePressed: topBar.navLinkClicked(modelData.id)
-
-                    MouseArea {
-                        id: navMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: { navItem.forceActiveFocus(); topBar.navLinkClicked(modelData.id) }
-                    }
-                }
+                model: 3
+                delegate: Rectangle { width: 18; height: 2; radius: 1; color: "#ffffff" }
             }
         }
-
-        Item { Layout.fillWidth: true }
-
-        // ── Right side ───────────────────────────────────────────────────
-        Row {
-            spacing: 14
-            Layout.alignment: Qt.AlignVCenter
-
-            Item {
-                id: notifIcon
-                width: 34; height: 34
-                anchors.verticalCenter: parent.verticalCenter
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 17
-                    color: notifMa.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                    border.color: topBar.clrMuted
-                    border.width: 1
-                    opacity: 0.9
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\uEA8F"   // Segoe MDL2 Assets: ringer
-                    color: notifMa.containsMouse ? topBar.clrPrimary : topBar.clrMuted
-                    font.family: "Segoe MDL2 Assets"
-                    font.pixelSize: 15
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                }
-
-                MouseArea {
-                    id: notifMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: topBar.notificationsClicked()
-                }
-            }
-
-            Loader {
-                anchors.verticalCenter: parent.verticalCenter
-                active: true
-                sourceComponent: (authManager && authManager.authenticated) ? profileAvatar : signInBtn
-            }
-        }
-    }
-
-    Component {
-        id: profileAvatar
-        Item {
-            width: 34; height: 34
-
-            Rectangle {
-                anchors.fill: parent
-                radius: 17
-                color: "#22232e"
-                border.color: Qt.rgba(0.95, 0.46, 0.13, 0.45)
-                border.width: 1
-
-                Text {
-                    anchors.centerIn: parent
-                    text: {
-                        if (!authManager || !authManager.authenticated) return "?"
-                        var em = authManager.email || ""
-                        if (em.indexOf("@") !== -1) {
-                            var local = em.substring(0, em.indexOf("@"))
-                            if (local.length > 0) return local.charAt(0).toUpperCase()
-                        }
-                        var uid = authManager.userId || ""
-                        if (uid.length > 0) {
-                            var s = uid.startsWith("user_") ? uid.substring(5) : uid
-                            return s.charAt(0).toUpperCase()
-                        }
-                        return "U"
-                    }
-                    color: topBar.clrPrimary
-                    font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
-                    font.pixelSize: 15
-                    font.weight: Font.Bold
-                }
-            }
-
-            MouseArea {
-                id: profMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: { if (authManager) authManager.signOut() }
-            }
-
-            ToolTip {
-                visible: profMa.containsMouse
-                text: "Sign Out"
-                delay: 500
-            }
-        }
-    }
-
-    Component {
-        id: signInBtn
         Rectangle {
-            width: btnText.implicitWidth + 26; height: 32
-            radius: 4
-            color: btnMa.containsMouse ? Qt.rgba(0.95, 0.46, 0.13, 0.18) : "transparent"
-            border.color: Qt.rgba(0.95, 0.46, 0.13, 0.55)
-            border.width: 1
-            Behavior on color { ColorAnimation { duration: 150 } }
+            anchors.fill: parent
+            anchors.margins: 4
+            radius: 8
+            color: menuMa.containsMouse ? "#161616" : "transparent"
+            border.color: menuBtn.activeFocus ? "#ffffff" : "transparent"
+            border.width: menuBtn.activeFocus ? 2 : 0
+        }
+        MouseArea {
+            id: menuMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: bar.menuClicked()
+        }
+    }
+
+    Text {
+        id: brandMini
+        visible: bar.compact
+        anchors { left: menuBtn.right; leftMargin: 6; verticalCenter: parent.verticalCenter }
+        text: "Animind"
+        color: "#ffffff"
+        font.family: bar.font
+        font.pixelSize: 17
+        font.weight: Font.Bold
+    }
+
+    // ── Search field ─────────────────────────────────────────────────────
+    Rectangle {
+        id: searchPill
+        visible: !bar.compact
+        anchors { left: parent.left; leftMargin: 24; verticalCenter: parent.verticalCenter }
+        width: Math.min(560, Math.max(220, parent.width - 220))
+        height: 40
+        radius: 20
+        color: bar.field
+        border.color: searchInput.activeFocus ? "#4a4a4a" : bar.hairline
+        border.width: 1
+        Behavior on border.color { ColorAnimation { duration: 140 } }
+
+        RowLayout {
+            anchors { fill: parent; leftMargin: 14; rightMargin: 10 }
+            spacing: 10
 
             Text {
-                id: btnText
-                anchors.centerIn: parent
-                text: (authManager && authManager.signingIn) ? "SIGNING IN" : "SIGN IN"
-                color: topBar.clrPrimary
-                font.family: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
-                font.pixelSize: 12
-                font.weight: Font.Bold
-                font.letterSpacing: 1.8
+                text: "\uE721"
+                color: bar.muted
+                font.family: bar.icons
+                font.pixelSize: 13
+                Layout.alignment: Qt.AlignVCenter
             }
 
-            MouseArea {
-                id: btnMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                enabled: !(authManager && authManager.signingIn)
-                onClicked: {
-                    if (authManager) authManager.signInWithBrowserBridge()
+            TextInput {
+                id: searchInput
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                color: "#ffffff"
+                selectionColor: "#ffffff"
+                selectedTextColor: "#000000"
+                font.family: bar.font
+                font.pixelSize: 14
+                cursorVisible: true
+                clip: true
+                verticalAlignment: TextInput.AlignVCenter
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: searchInput.text.length === 0 && !searchInput.activeFocus
+                    text: "Search anime, genres, or characters"
+                    color: bar.muted
+                    font.family: bar.font
+                    font.pixelSize: 14
                 }
+                onAccepted: bar.querySubmitted(text)
+                Keys.onEscapePressed: { searchInput.text = ""; searchInput.focus = false }
+            }
+
+            Item {
+                Layout.alignment: Qt.AlignVCenter
+                width: 20; height: 20
+                visible: searchInput.text.length > 0
+                Text {
+                    anchors.centerIn: parent
+                    text: "\uE711"
+                    color: bar.muted
+                    font.family: bar.icons
+                    font.pixelSize: 11
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -4
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { searchInput.text = ""; searchInput.forceActiveFocus() }
+                }
+            }
+        }
+    }
+
+    Item {
+        id: searchBtn
+        visible: bar.compact
+        anchors { right: avatarBtn.left; rightMargin: 4; verticalCenter: parent.verticalCenter }
+        width: 40; height: 40
+        Text {
+            anchors.centerIn: parent
+            text: "\uE721"
+            color: "#ffffff"
+            font.family: bar.icons
+            font.pixelSize: 15
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: bar.searchClicked()
+        }
+    }
+
+    // ── Bell ─────────────────────────────────────────────────────────────
+    Item {
+        id: notifBtn
+        visible: !bar.compact
+        anchors { right: avatarBtn.left; rightMargin: 10; verticalCenter: parent.verticalCenter }
+        width: 36; height: 36
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 18
+            color: notifMa.containsMouse ? "#1a1a1a" : "transparent"
+            border.color: bar.hairline
+            border.width: 1
+            Behavior on color { ColorAnimation { duration: 120 } }
+        }
+        Text {
+            anchors.centerIn: parent
+            text: "\uEA8F"
+            color: "#d4d4d4"
+            font.family: bar.icons
+            font.pixelSize: 14
+        }
+        MouseArea {
+            id: notifMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: bar.notificationsClicked()
+        }
+    }
+
+    // ── Avatar ───────────────────────────────────────────────────────────
+    Item {
+        id: avatarBtn
+        anchors { right: parent.right; rightMargin: bar.compact ? 12 : 24; verticalCenter: parent.verticalCenter }
+        width: 34; height: 34
+        activeFocusOnTab: true
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 17
+            color: "#1e1e1e"
+            border.color: (authManager && authManager.authenticated) ? "#ffffff" : bar.hairline
+            border.width: 1
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: text.length > 0
+            text: {
+                if (!authManager || !authManager.authenticated) return ""
+                var em = authManager.email || ""
+                if (em.indexOf("@") !== -1) {
+                    var local = em.substring(0, em.indexOf("@"))
+                    if (local.length > 0) return local.charAt(0).toUpperCase()
+                }
+                var uid = authManager.userId || ""
+                return uid.length > 0 ? uid.replace("user_", "").charAt(0).toUpperCase() : "U"
+            }
+            color: "#ffffff"
+            font.family: bar.font
+            font.pixelSize: 14
+            font.weight: Font.Bold
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: authManager ? !authManager.authenticated : true
+            text: "\uE77B"
+            color: "#d4d4d4"
+            font.family: bar.icons
+            font.pixelSize: 15
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                avatarBtn.forceActiveFocus()
+                if (!authManager) return
+                if (authManager.authenticated) authManager.signOut()
+                else authManager.signInWithBrowserBridge()
             }
         }
     }

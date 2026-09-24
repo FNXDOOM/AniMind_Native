@@ -8,7 +8,7 @@ import "../"
 // repeated here because this page is also loaded standalone.
 Rectangle {
     id: homePage
-    color: "#07070d"
+    color: "#0a0a0a"
 
     property var  trendingList:  []
     property var  simulcastList: []
@@ -22,11 +22,23 @@ Rectangle {
     signal seriesClicked(int id)
     signal trendingSeeAllRequested()
 
-    readonly property string displayFont: "Bahnschrift, Segoe UI Variable Display, Segoe UI"
+    readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"
     readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
     readonly property string iconFont:    "Segoe MDL2 Assets"
     readonly property int    gutter:      32
     readonly property bool   calm:        Qt.application.arguments.indexOf("--reduce-motion") !== -1
+
+    // clamp() equivalent, measured against this page's own width so the hero
+    // stays readable when the window is narrow.
+    function fluid(minV, maxV, fromW, toW) {
+        var w = homePage.width
+        if (w <= fromW) return minV
+        if (w >= toW)   return maxV
+        return minV + (maxV - minV) * (w - fromW) / (toW - fromW)
+    }
+    readonly property int heroSize:  Math.round(fluid(28, 46, 520, 1500))
+    readonly property int heroLead:  Math.round(heroSize * 1.06)
+    readonly property int heroColW:  Math.round(fluid(280, 660, 420, 1500))
 
     // ── Data ─────────────────────────────────────────────────────────────
     function loadTrendingIfNeeded() {
@@ -66,6 +78,16 @@ Rectangle {
     Component.onCompleted: loadTrendingIfNeeded()
 
     // ── Hero copy helpers ────────────────────────────────────────────────
+    // Reference cards carry "2013  •  87 eps" under the title, not chips.
+    function cardMeta(m) {
+        if (!m) return ""
+        var bits = []
+        if (m.seasonYear) bits.push(String(m.seasonYear))
+        var eps = m.nextAiringEpisode ? (m.nextAiringEpisode.episode - 1) : m.episodes
+        if (eps) bits.push(eps + " eps")
+        return bits.join("  •  ")
+    }
+
     function cour(m) {
         if (!m) return ""
         var s = m.season || ""
@@ -133,7 +155,7 @@ Rectangle {
                 id: rowTitleTxt
                 anchors { left: parent.left; leftMargin: homePage.gutter; verticalCenter: parent.verticalCenter }
                 text: rowRoot.rowTitle
-                color: "#f2f2f7"
+                color: "#ffffff"
                 font.family: homePage.displayFont
                 font.pixelSize: 22
                 font.weight: Font.Bold
@@ -147,12 +169,12 @@ Rectangle {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: rowRoot.showSeeAll
-                    text: "ALL"
-                    color: seeAllMa.containsMouse ? "#f47521" : "#9a9ab2"
+                    text: "View all"
+                    color: seeAllMa.containsMouse ? "#ffffff" : "#8a8a8a"
                     font.family: homePage.displayFont
-                    font.pixelSize: 12
-                    font.weight: Font.Bold
-                    font.letterSpacing: 1.8
+                    font.pixelSize: 13
+                    font.weight: Font.Normal
+                    font.letterSpacing: 0
                     Behavior on color { ColorAnimation { duration: 140 } }
                     MouseArea {
                         id: seeAllMa
@@ -229,13 +251,9 @@ Rectangle {
                 delegate: AnimePosterCard {
                     width: rowRoot.cardWidth
                     title:     AniListApi.title(modelData)
-                    rating:    AniListApi.score(modelData)
-                    subtext:   (AniListApi.studio(modelData) ? AniListApi.studio(modelData) + "  ·  " : "")
-                               + (modelData.seasonYear ? String(modelData.seasonYear) : "")
-                    epText:    rowRoot.epTextMode === "ongoing"
-                               ? "ONGOING"
-                               : (AniListApi.isNewEpisode(modelData) ? "NEW EP"
-                                  : (modelData.episodes ? "EP " + modelData.episodes : ""))
+                    rating:    ""
+                    epText:    ""
+                    subtext:   homePage.cardMeta(modelData)
                     posterUrl: AniListApi.cover(modelData)
 
                     onClicked: homePage.seriesClicked(modelData.id)
@@ -261,7 +279,7 @@ Rectangle {
                 width: 44
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "#07070d" }
+                    GradientStop { position: 0.0; color: "#0a0a0a" }
                     GradientStop { position: 1.0; color: "transparent" }
                 }
                 visible: rowListView.contentX > 1
@@ -272,7 +290,7 @@ Rectangle {
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 1.0; color: "#07070d" }
+                    GradientStop { position: 1.0; color: "#0a0a0a" }
                 }
                 visible: rowListView.contentWidth > rowListView.width
             }
@@ -352,7 +370,7 @@ Rectangle {
                         orientation: Gradient.Vertical
                         GradientStop { position: 0.58; color: "transparent" }
                         GradientStop { position: 0.86; color: Qt.rgba(0.027, 0.027, 0.051, 0.82) }
-                        GradientStop { position: 1.00; color: "#07070d" }
+                        GradientStop { position: 1.00; color: "#0a0a0a" }
                     }
                 }
 
@@ -361,7 +379,7 @@ Rectangle {
                     id: heroPulse
                     anchors.centerIn: parent
                     width: 40; height: 40; radius: 20
-                    color: "transparent"; border.color: "#f47521"; border.width: 2
+                    color: "transparent"; border.color: "#ffffff"; border.width: 2
                     visible: loadingHero && heroMedia === null
                     SequentialAnimation on opacity {
                         running: heroPulse.visible && !homePage.calm
@@ -376,7 +394,7 @@ Rectangle {
                     id: heroCopy
                     visible: heroMedia !== null
                     anchors { left: parent.left; leftMargin: homePage.gutter + 12; bottom: parent.bottom }
-                    width: Math.min(hero.width * 0.52, 660)
+                    width: Math.min(homePage.heroColW, hero.width - homePage.gutter * 2)
                     spacing: 0
 
                     // One orchestrated entrance when the hero data lands
@@ -398,17 +416,13 @@ Rectangle {
                             text: {
                                 homePage.heroTallyStamp
                                 if (!homePage.heroMedia) return ""
-                                var bits = []
-                                var c = homePage.cour(homePage.heroMedia);   if (c) bits.push(c)
-                                var f = homePage.formatLabel(homePage.heroMedia); if (f) bits.push(f)
-                                var s = homePage.statusLabel(homePage.heroMedia); if (s) bits.push(s)
-                                return bits.join("   ·   ").toUpperCase()
+                                return "#1 in Anime Today"
                             }
-                            color: "#f47521"
+                            color: "#b3b3b3"
                             font.family: homePage.displayFont
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
-                            font.letterSpacing: 2.6
+                            font.letterSpacing: 0.3
                         }
                     }
 
@@ -417,7 +431,7 @@ Rectangle {
                     Text {
                         width: parent.width
                         text: heroMedia ? AniListApi.title(heroMedia) : ""
-                        color: "#f2f2f7"
+                        color: "#ffffff"
                         font.family: homePage.displayFont
                         font.pixelSize: 52
                         font.weight: Font.Bold
@@ -432,6 +446,27 @@ Rectangle {
 
                     Item { width: 1; height: 12 }
 
+                    // Season, genres and length, as the reference states them
+                    Text {
+                        visible: text.length > 0
+                        topPadding: 8
+                        width: parent.width
+                        text: {
+                            var d = homePage.heroMedia
+                            if (!d) return ""
+                            var bits = []
+                            bits.push("S1")
+                            if (d.genres) bits = bits.concat(d.genres.slice(0, 2))
+                            if (d.episodes) bits.push(d.episodes + " Episodes")
+                            else if (d.nextAiringEpisode) bits.push("Ongoing")
+                            return bits.join("  •  ")
+                        }
+                        color: "#e6e6e6"
+                        font.family: homePage.displayFont
+                        font.pixelSize: 13
+                        font.letterSpacing: 0.2
+                    }
+
                     // Score + studio
                     Row {
                         spacing: 14
@@ -439,14 +474,14 @@ Rectangle {
                         Text {
                             visible: homePage.heroMedia ? AniListApi.score(homePage.heroMedia) !== "" : false
                             text: "\u2605 " + (heroMedia ? AniListApi.score(heroMedia) : "")
-                            color: "#f2f2f7"
+                            color: "#ffffff"
                             font.family: homePage.displayFont
                             font.pixelSize: 15; font.weight: Font.Bold; font.letterSpacing: 1.0
                         }
                         Text {
                             visible: heroMedia && AniListApi.studio(heroMedia) !== ""
                             text: heroMedia ? AniListApi.studio(heroMedia) : ""
-                            color: "#9a9ab2"
+                            color: "#b3b3b3"
                             font.family: homePage.bodyFont; font.pixelSize: 13
                         }
                     }
@@ -470,7 +505,7 @@ Rectangle {
                             Rectangle {
                                 id: tallyDot
                                 width: 7; height: 7; radius: 4
-                                color: "#f47521"
+                                color: "#ffffff"
                                 anchors.verticalCenter: parent.verticalCenter
                                 SequentialAnimation on scale {
                                     running: tallyChip.visible && !homePage.calm
@@ -492,7 +527,7 @@ Rectangle {
                                     homePage.heroTallyStamp
                                     return homePage.heroMedia ? homePage.tally(homePage.heroMedia) : ""
                                 }
-                                color: "#f2f2f7"
+                                color: "#ffffff"
                                 font.family: homePage.displayFont
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
@@ -506,7 +541,7 @@ Rectangle {
                     Text {
                         width: parent.width
                         text: heroMedia ? AniListApi.cleanDesc(heroMedia) : ""
-                        color: "#a8a8be"
+                        color: "#b3b3b3"
                         font.family: homePage.bodyFont
                         font.pixelSize: 14
                         lineHeightMode: Text.FixedHeight
@@ -526,15 +561,15 @@ Rectangle {
                         Rectangle {
                             width: Math.max(150, watchTxt.implicitWidth + 40); height: 44
                             radius: 5
-                            color: _wma.pressed ? "#c9551a" : _wma.containsMouse ? "#ff8434" : "#f47521"
+                            color: _wma.pressed ? "#d9d9d9" : _wma.containsMouse ? "#ffffff" : "#f5f5f5"
                             Behavior on color { ColorAnimation { duration: 120 } }
                             Text {
                                 id: watchTxt
                                 anchors.centerIn: parent
-                                text: "▶   WATCH NOW"
-                                color: "white"
+                                text: "▶   Play"
+                                color: "#0a0a0a"
                                 font.family: homePage.displayFont
-                                font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 1.8
+                                font.pixelSize: 14; font.weight: Font.DemiBold; font.letterSpacing: 0
                             }
                             MouseArea {
                                 id: _wma
@@ -554,8 +589,8 @@ Rectangle {
                             Text {
                                 id: infoTxt
                                 anchors.centerIn: parent
-                                text: "DETAILS"
-                                color: "#f2f2f7"
+                                text: "More Info"
+                                color: "#ffffff"
                                 font.family: homePage.displayFont
                                 font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 1.8
                             }

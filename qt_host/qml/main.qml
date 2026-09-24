@@ -15,62 +15,79 @@ ApplicationWindow {
     minimumHeight: 520
     visible: true
     title: "Animind Player"
-    color: ink
+    color: bg
 
     Material.theme: Material.Dark
 
-    // ── Design tokens: "late-night broadcast" ─────────────────────────────
-    // Surfaces. Blue-shifted near-black: projector dark, not terminal dark.
-    readonly property color ink:          "#07070d"
-    readonly property color surface:      "#101119"
-    readonly property color veil:         "#04040a"
-    readonly property color hairline:     Qt.rgba(1, 1, 1, 0.08)
+    // ── Design tokens ─────────────────────────────────────────────────────
+    // Monochrome near-black. The only "accent" is white: primary actions are
+    // white pills with black text, everything else is a grey tier.
+    readonly property color bg:         "#0a0a0a"
+    readonly property color surface:    "#141414"
+    readonly property color surfaceHi:  "#1e1e1e"
+    readonly property color hairline:   "#262626"
+    readonly property color scrim:      Qt.rgba(0, 0, 0, 0.72)
 
-    // Brand. `signalOrange` is the on-air mark; `dusk` only ever appears as the far
-    // stop of a gradient, never as a standalone accent.
-    readonly property color signalOrange: "#f47521"
-    readonly property color signalDeep:   "#c9551a"
-    readonly property color dusk:         "#6f00be"
+    readonly property color textPrimary:   "#ffffff"
+    readonly property color textSecondary: "#b3b3b3"
+    readonly property color textMuted:     "#8a8a8a"
+    readonly property color textFaint:     "#6e6e6e"
 
-    // Text tiers.
-    readonly property color textPrimary:  "#f2f2f7"
-    readonly property color textMuted:    "#9a9ab2"
-    readonly property color textFaint:    "#62627c"
+    // Kept so not-yet-migrated pages keep compiling.
+    readonly property color ink:          bg
+    readonly property color veil:         "#000000"
+    readonly property color signalOrange: textPrimary
+    readonly property color signalDeep:   "#d9d9d9"
+    readonly property color dusk:         "#3a3a3a"
+    readonly property color accentOrange: textPrimary
+    readonly property color accentPurple: dusk
+    readonly property color clrPrimary:   textPrimary
+    readonly property color clrMuted:     textSecondary
+    readonly property color clrOnSurface: textPrimary
 
-    // Type. Bahnschrift is DIN-derived and ships with Windows 10+: the
-    // on-screen-graphics voice of broadcast and TV guides. Chains fall back to
-    // a sane sans on machines without it.
-    readonly property string displayFont:  "Bahnschrift, Segoe UI Variable Display, Segoe UI"
-    readonly property string bodyFont:     "Segoe UI Variable Text, Segoe UI"
-    readonly property string uiFont:       displayFont
-    readonly property string iconFont:     "Segoe MDL2 Assets"
+    // One neutral grotesque throughout; hierarchy comes from weight and size.
+    readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"
+    readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
+    readonly property string uiFont:      bodyFont
+    readonly property string iconFont:    "Segoe MDL2 Assets"
 
-    // Type scale. QML rejects decimal font.pixelSize literals, so these are int.
-    readonly property int tsHero:       52
-    readonly property int tsPage:       30
-    readonly property int tsSection:    22
-    readonly property int tsCard:       15
-    readonly property int tsBody:       14
-    readonly property int tsMeta:       12
-    readonly property int tsEyebrow:    11
-    readonly property real trEyebrow:    2.6
-    readonly property real trTally:      1.2
+    // ── Responsive scale ──────────────────────────────────────────────────
+    // Breakpoints follow content, not devices: the sidebar stops fitting at
+    // 1024, and the nav moves to a bottom bar below 640.
+    readonly property int  bpMobile:  640
+    readonly property int  bpTablet:  1024
+    readonly property bool isMobile:  width < bpMobile
+    readonly property bool isCompact: width < bpTablet
+    readonly property int  navW:      isCompact ? 0 : 208
+    readonly property int  headerH:   isMobile ? 56 : 64
+    readonly property int  tabH:      isMobile ? 64 : 0
+    readonly property int  gutter:    isMobile ? 16 : (isCompact ? 24 : 32)
 
-    // Spacing rhythm: 8px base.
-    readonly property int gutter:       32
-    readonly property int gapCard:      20
-    readonly property int gapRow:       32
+    // clamp() equivalent: linear between two viewport anchors, then bounded.
+    function fluid(minV, maxV, fromW, toW) {
+        if (width <= fromW) return minV
+        if (width >= toW)   return maxV
+        return minV + (maxV - minV) * (width - fromW) / (toW - fromW)
+    }
+
+    // Type scale, fluid between a 900px and a 1600px window.
+    readonly property real tsHero:     fluid(30, 46, 900, 1600)
+    readonly property int  tsPage:     28
+    readonly property int  tsSection:  20
+    readonly property int  tsCard:     13
+    readonly property int  tsBody:     14
+    readonly property int  tsMeta:     12
+    readonly property int  tsSmall:    11
+    readonly property real trEyebrow:  0.4
+    readonly property real trTally:    0.4
+
+    readonly property int radiusCard:  8
+    readonly property int radiusCtl:   8
+    readonly property int minTouch:    isMobile ? 44 : 32
 
     // Honour an explicit request for less movement. Qt 6 removed Qt.getenv(),
     // so this reads a launch flag instead of an environment variable.
     readonly property bool reduceMotion: Qt.application.arguments.indexOf("--reduce-motion") !== -1
-
-    // Aliases kept for pages not yet moved onto the new names.
-    readonly property color accentOrange: signalOrange
-    readonly property color accentPurple: dusk
-    readonly property color clrPrimary:   signalOrange
-    readonly property color clrMuted:     textMuted
-    readonly property color clrOnSurface: textPrimary
 
     // ── Navigation state ──────────────────────────────────────────────────
     // Pages: "home" | "browse" | "simulcast" | "simulcastDetail" | "mylist" | "history" | "settings" | "player"
@@ -81,7 +98,8 @@ ApplicationWindow {
     property string currentCloudShowTitle: ""
     readonly property bool inPlayer: currentPage === "player"
     readonly property int  sideNavW: 256
-    property bool sideNavExpanded: true
+    property bool drawerOpen: false
+    property string searchQuery: ""
     property bool notifPanelOpen: false
 
     // ── Search page state (no longer an overlay — navigated as a page) ────
@@ -369,16 +387,133 @@ ApplicationWindow {
     // NAV SHELL
     // ─────────────────────────────────────────────────────────────────────
 
+    // ── Rail: the primary nav on wide windows ────────────────────────────
+    Item {
+        id: rail
+        anchors { top: parent.top; left: parent.left; bottom: parent.bottom }
+        width: root.navW
+        visible: width > 0 && !root.inPlayer
+        clip: true
+
+        SideNav {
+            anchors { top: parent.top; left: parent.left; bottom: parent.bottom }
+            currentPage: root.currentPage
+            onNavigate: (page) => root.currentPage = page
+        }
+    }
+
+    // ── Drawer: the same rail, folded away below the tablet breakpoint ───
+    Drawer {
+        id: navDrawer
+        parent: root.overlay
+        edge: Qt.LeftEdge
+        width: Math.min(240, root.width)
+        height: root.height
+        modal: true
+        dim: true
+        interactive: true
+        visible: root.drawerOpen && !root.inPlayer
+        padding: 0
+
+        background: Rectangle { color: "#0a0a0a" }
+
+        SideNav {
+            anchors.fill: parent
+            drawerMode: true
+            currentPage: root.currentPage
+            onNavigate: (page) => { root.drawerOpen = false; root.currentPage = page }
+        }
+    }
+
     TopBar {
         id: topBar
-        anchors { top: parent.top; left: parent.left; right: parent.right }
+        anchors { top: parent.top; left: rail.right; right: parent.right }
         visible: !root.inPlayer
         z: 11
+        compact: root.isCompact
         currentPage:  root.currentPage
         onNavLinkClicked: (page) => root.currentPage = page
         onSearchClicked:  root.currentPage = "search"
+        onMenuClicked:    root.drawerOpen = !root.drawerOpen
         onProfileClicked: {}
         onNotificationsClicked: root.notifPanelOpen = !root.notifPanelOpen
+        onQuerySubmitted: (text) => {
+            root.searchQuery = text
+            root.currentPage = "search"
+        }
+    }
+
+    // ── Bottom tabs: navigation on phones ────────────────────────────────
+    Item {
+        id: tabBar
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+        height: root.tabH
+        visible: height > 0 && !root.inPlayer
+        z: 12
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#0a0a0a"
+            Rectangle {
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 1; color: "#1f1f1f"
+            }
+        }
+
+        Row {
+            anchors.fill: parent
+            Repeater {
+                model: [
+                    { page: "home",     icon: "\uE80F", label: "Home" },
+                    { page: "browse",   icon: "\uE80A", label: "Browse" },
+                    { page: "mylist",   icon: "\uE71D", label: "My List" },
+                    { page: "history",  icon: "\uE823", label: "Watching" },
+                    { page: "settings", icon: "\uE713", label: "Settings" }
+                ]
+                delegate: Item {
+                    id: tab
+                    required property var modelData
+                    width: tabBar.width / 5
+                    height: tabBar.height
+                    readonly property bool isActive: root.currentPage === modelData.page
+
+                    Accessible.role: Accessible.PageTab
+                    Accessible.name: modelData.label
+                    Accessible.focusable: true
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: modelData.icon
+                            color: tab.isActive ? "#ffffff" : "#8a8a8a"
+                            font.family: "Segoe MDL2 Assets"
+                            font.pixelSize: 17
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: modelData.label
+                            color: tab.isActive ? "#ffffff" : "#8a8a8a"
+                            font.family: "Segoe UI Variable Text, Segoe UI"
+                            font.pixelSize: 10
+                            font.weight: tab.isActive ? Font.DemiBold : Font.Normal
+                        }
+                    }
+                    Rectangle {
+                        anchors { top: parent.top; horizontalCenter: parent.horizontalCenter }
+                        width: 20; height: 2; radius: 1
+                        color: "#ffffff"
+                        visible: tab.isActive
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.currentPage = modelData.page
+                    }
+                }
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -423,9 +558,9 @@ ApplicationWindow {
         id: pageCanvas
         anchors {
             top:    topBar.bottom
-            left:   parent.left
+            left:   rail.right
             right:  parent.right
-            bottom: parent.bottom
+            bottom: tabBar.top
         }
         visible: !root.inPlayer
         z: 5
