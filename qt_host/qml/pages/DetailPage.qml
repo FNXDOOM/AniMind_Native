@@ -62,7 +62,7 @@ Rectangle {
             bottomPadding: 20
 
             Button {
-                text: "< Back to Browse"
+                text: "< Back"
                 onClicked: backRequested()
             }
 
@@ -212,13 +212,8 @@ Rectangle {
                     fillColor: "#ff6b00"
                     textColor: "white"
                     onClicked: {
-                        if (!detail) return
-                        if (detail.trailer && detail.trailer.site && detail.trailer.id
-                                && detail.trailer.site.toLowerCase() === "youtube") {
-                            Qt.openUrlExternally("https://www.youtube.com/watch?v=" + detail.trailer.id)
-                        } else {
-                            Qt.openUrlExternally("https://anilist.co/anime/" + detail.id)
-                        }
+                        if (detail)
+                            playRequested(detail.id, AniListApi.title(detail))
                     }
                 }
                 ActionButton {
