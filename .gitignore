@@ -48,3 +48,6 @@ vendor/cef/
 # Design and Installer
 Anime streaming design/
 installer.iss
+
+# QML verification harness: capture scripts, test doubles and screenshots
+.g/
