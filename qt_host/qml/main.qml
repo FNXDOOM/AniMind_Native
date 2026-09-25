@@ -1786,6 +1786,10 @@ ApplicationWindow {
     function hideTimerRestart() { hideTimer.restart() }
 
     function goSearch() {
+        // Every other navigation records where it came from; this one did not,
+        // so Ctrl+K followed by Escape dropped you on Home from any page.
+        if (root.currentPage !== "search")
+            root.previousPage = root.currentPage
         root.currentPage = "search"
     }
 
