@@ -900,7 +900,10 @@ ApplicationWindow {
         color: "#402020"
         border.color: "#a05050"
         border.width: 1
-        implicitWidth: Math.min(parent.width - 40, errText.implicitWidth + 24)
+        // width, not implicitWidth: a Rectangle defaults to zero wide and
+        // nothing here reads the implicit value, so the pill collapsed and the
+        // auth error it exists to show was invisible.
+        width: Math.min(parent.width - 40, errText.implicitWidth + 24)
         height: errText.implicitHeight + 16
 
         Text {
