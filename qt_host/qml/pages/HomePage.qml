@@ -135,209 +135,6 @@ Rectangle {
     }
     property int heroTallyStamp: 0
 
-    // ── Row section ──────────────────────────────────────────────────────
-    component AnimeRow: Column {
-        id: rowRoot
-
-        property string rowTitle: ""
-        property var    rowModel: []
-        property string epTextMode: "auto"   // "auto" | "ongoing"
-        property bool   showSeeAll: false
-        property int    cardWidth: 196
-        // art (w*1.5) + 10 gap + 38 two-line title slot + 3 + 18 meta line
-        property int    listViewHeight: cardWidth * 3 / 2 + 78
-
-        signal seeAllClicked()
-
-        // Driven by the row's own HoverHandler; gates the arrow reveal.
-        property bool hovered: false
-
-        width: parent ? parent.width : 0
-        spacing: 0
-        visible: rowModel.length > 0
-
-        // Header: title left, controls right, one baseline
-        Item {
-            id: rowHeader
-            width: parent.width
-            height: 44
-
-            // Scoped to the header rather than the whole row: a HoverHandler
-            // over the ListView would compete with each card's own hover and
-            // flatten the card lift effect.
-            //
-            // `onHoveredChanged`, not `onChanged`: writing the latter as
-            // `onChanged: function (event) { ... }` aborts creation of the
-            // entire page under Qt 6.5.3, and the shell just shows an empty
-            // content area with no fatal-looking error.
-            HoverHandler {
-                id: rowHeaderHover
-                onHoveredChanged: rowRoot.hovered = rowHeaderHover.hovered
-            }
-
-            Text {
-                id: rowTitleTxt
-                anchors { left: parent.left; leftMargin: homePage.gutter; verticalCenter: parent.verticalCenter }
-                text: rowRoot.rowTitle
-                color: "#ffffff"
-                font.family: homePage.displayFont
-                font.pixelSize: 22
-                font.weight: Font.Bold
-                font.letterSpacing: 0.8
-            }
-
-            Row {
-                anchors { right: parent.right; rightMargin: 24; verticalCenter: parent.verticalCenter }
-                spacing: 10
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: rowRoot.showSeeAll
-                    text: "View all"
-                    color: seeAllMa.containsMouse ? "#ffffff" : "#8a8a8a"
-                    font.family: homePage.displayFont
-                    font.pixelSize: 13
-                    font.weight: Font.Normal
-                    font.letterSpacing: 0
-                    Behavior on color { ColorAnimation { duration: 140 } }
-                    MouseArea {
-                        id: seeAllMa
-                        anchors.fill: parent
-                        anchors.margins: -6
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: rowRoot.seeAllClicked()
-                    }
-                }
-
-                Row {
-                    id: arrowGroup
-                    spacing: 6
-                    anchors.verticalCenter: parent.verticalCenter
-                    // Section 14: the arrows are an affordance for someone who
-                    // has looked at the row, not permanent chrome. Only the
-                    // arrows fade -- "View all" is a destination and stays put.
-                    // Row positions invisible children, so the slot is reserved
-                    // and nothing reflows when they appear.
-                    opacity: rowRoot.hovered ? 1.0 : 0.0
-                    visible: opacity > 0.01
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.dFast; easing.type: Theme.easeOutCubic }
-                    }
-
-                    Repeater {
-                        model: ["left", "right"]
-                        delegate: Rectangle {
-                            id: arrow
-                            required property string modelData
-                            readonly property bool canGo: modelData === "left"
-                                                          ? rowListView.contentX > 1
-                                                          : rowListView.contentX < rowListView.contentWidth - rowListView.width - 1
-                            width: 30; height: 30; radius: 5
-                            color: arrowMa.containsMouse ? Qt.rgba(1,1,1,0.12) : Qt.rgba(1,1,1,0.05)
-                            border.color: Qt.rgba(1,1,1,0.10); border.width: 1
-                            opacity: canGo ? 1.0 : 0.28
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: arrow.modelData === "left" ? "\uE76B" : "\uE76C"
-                                color: "#c8c8dc"; font.pixelSize: 11
-                                font.family: homePage.iconFont
-                            }
-                            MouseArea {
-                                id: arrowMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    var step = Math.max(240, rowListView.width * 0.7)
-                                    if (arrow.modelData === "left")
-                                        rowListView.contentX = Math.max(0, rowListView.contentX - step)
-                                    else
-                                        rowListView.contentX = Math.min(
-                                            Math.max(0, rowListView.contentWidth - rowListView.width),
-                                            rowListView.contentX + step)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Item {
-            width: parent.width
-            height: rowRoot.listViewHeight
-
-            ListView {
-                id: rowListView
-                // Section 14: scrolling must be smooth. Without this the arrow
-                // buttons teleport a whole page.
-                Behavior on contentX {
-                    enabled: !homePage.calm
-                    NumberAnimation { duration: Theme.dSlow; easing.type: Theme.easeOutCubic }
-                }
-                anchors { left: parent.left; right: parent.right; leftMargin: homePage.gutter; rightMargin: homePage.gutter }
-                height: parent.height
-                model: rowRoot.rowModel
-                orientation: ListView.Horizontal
-                spacing: 20
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                flickDeceleration: 3500
-                maximumFlickVelocity: 3000
-                keyNavigationEnabled: true
-
-                delegate: AnimePosterCard {
-                    width: rowRoot.cardWidth
-                    title:     AniListApi.title(modelData)
-                    rating:    ""
-                    epText:    ""
-                    subtext:   homePage.cardMeta(modelData)
-                    posterUrl: AniListApi.cover(modelData)
-
-                    onClicked: homePage.seriesClicked(modelData.id)
-                    onWatchClicked: homePage.playRequested(modelData.id, title)
-
-                    onAddClicked: {
-                        if (authManager) {
-                            var item = {
-                                "anilist_id": modelData.id || modelData.anilist_id,
-                                "title": title,
-                                "cover_image_url": posterUrl,
-                                "rating": rating
-                            };
-                            authManager.addToLibrary(item);
-                        }
-                    }
-                }
-            }
-
-            // Edge fades so cards dissolve instead of being sliced
-            Rectangle {
-                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-                width: 44
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "#0a0a0a" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                visible: rowListView.contentX > 1
-            }
-            Rectangle {
-                anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
-                width: 64
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 1.0; color: "#0a0a0a" }
-                }
-                visible: rowListView.contentWidth > rowListView.width
-            }
-        }
-    }
-
     // ═════════════════════════════════════════════════════════════════════
     Flickable {
         id: flick
@@ -695,6 +492,11 @@ Rectangle {
             Item { width: 1; height: 28 }
 
             AnimeRow {
+                gutter:      homePage.gutter
+                calm:        homePage.calm
+                metaFor:     homePage.cardMeta
+                onSeriesPicked: homePage.seriesClicked(anilistId)
+                onWatchPicked:  homePage.playRequested(anilistId, title)
                 rowTitle:    "Trending Now"
                 showSeeAll:  true
                 rowModel:    homePage.trendingList
@@ -747,6 +549,11 @@ Rectangle {
             Item { width: 1; height: 20 }
 
             AnimeRow {
+                gutter:      homePage.gutter
+                calm:        homePage.calm
+                metaFor:     homePage.cardMeta
+                onSeriesPicked: homePage.seriesClicked(anilistId)
+                onWatchPicked:  homePage.playRequested(anilistId, title)
                 rowTitle:   "Simulcasts"
                 rowModel:   homePage.simulcastList
                 epTextMode: "ongoing"
@@ -755,6 +562,11 @@ Rectangle {
             Item { width: 1; height: 20 }
 
             AnimeRow {
+                gutter:      homePage.gutter
+                calm:        homePage.calm
+                metaFor:     homePage.cardMeta
+                onSeriesPicked: homePage.seriesClicked(anilistId)
+                onWatchPicked:  homePage.playRequested(anilistId, title)
                 rowTitle:   "Currently Airing"
                 rowModel:   homePage.airingList
                 epTextMode: "auto"
@@ -763,6 +575,11 @@ Rectangle {
             Item { width: 1; height: 20 }
 
             AnimeRow {
+                gutter:      homePage.gutter
+                calm:        homePage.calm
+                metaFor:     homePage.cardMeta
+                onSeriesPicked: homePage.seriesClicked(anilistId)
+                onWatchPicked:  homePage.playRequested(anilistId, title)
                 rowTitle:   "Top Rated"
                 rowModel: {
                     var arr = homePage.trendingList.slice()
