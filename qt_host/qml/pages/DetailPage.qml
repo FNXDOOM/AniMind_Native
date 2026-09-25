@@ -251,18 +251,30 @@ Rectangle {
             // the facts that answer "should I start this?" are on screen without
             // opening the Details tab. Hidden below 900px, where the banner has
             // no room for it.
-            Column {
+            Rectangle {
                 id: infoRail
                 anchors { top: banner.top; right: banner.right
                           topMargin: Theme.s6; rightMargin: Theme.gutterFor(detailPage.width) }
-                width: 240
-                spacing: Theme.s5
+                width: railCol.width + Theme.s6 * 2
+                height: railCol.height + Theme.s6 * 2
+                radius: Theme.rLg
+                // Over a banner that can be any colour at any brightness the
+                // rail needs its own surface; the labels were unreadable
+                // sitting directly on the artwork.
+                color: Theme.glassPanel
+                border.color: Theme.borderSubtle; border.width: 1
                 visible: detailPage.detail !== null && detailPage.width >= 900
                 opacity: detailPage.detail ? 1.0 : 0.0
                 Behavior on opacity {
                     NumberAnimation { duration: detailPage.calm ? 0 : Theme.dSlow
                                                       easing.type: Theme.easeOutCubic }
                 }
+
+                Column {
+                    id: railCol
+                    x: Theme.s6; y: Theme.s6
+                    width: 240
+                    spacing: Theme.s5
 
                 Column {
                     width: parent.width
@@ -363,6 +375,8 @@ Rectangle {
                     }
                 }
             }
+
+                }
 
             // Back, over the banner
             Item {
