@@ -788,6 +788,9 @@ ApplicationWindow {
                     root.previousPage = root.currentPage
                     root.currentPage = "detail"
                 })
+
+                if (item.browseRequested)
+                    item.browseRequested.connect(function() { root.currentPage = "browse" })
             }
         }
         Loader {

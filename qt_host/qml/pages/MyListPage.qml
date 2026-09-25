@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
 import ".."
+import "../components"
 
 // MyListPage — displays the authenticated user's saved anime list
 // Public API:
@@ -22,6 +23,7 @@ Item {
 
     // ── Public API ────────────────────────────────────────────────────────
     signal seriesSelected(int showId)
+    signal browseRequested()
 
     // ── Data binding ──────────────────────────────────────────────────────
     // Automatically updates whenever authManager.libraryShowsChanged is emitted
@@ -74,6 +76,15 @@ Item {
         else if (item.episode_count) bits.push(item.episode_count + " eps")
         return bits.join("  •  ")
     }
+
+    // ── Grid metrics ───────────────────────────────────────────────────────
+    // Shared by the Flow delegate and the loading skeleton so the two agree
+    // on column count and card width instead of each guessing.
+    readonly property int    gutter:   24
+    readonly property int    cardGap:  Theme.s4
+    readonly property int    gridCols: Math.max(4, Math.min(5, Math.floor(Math.max(400, width - gutter * 2) / 190)))
+    readonly property int    cardW:    Math.max(80, Math.floor((Math.max(400, width - gutter * 2) - cardGap * (gridCols - 1)) / gridCols))
+    readonly property int    cardH:    Math.round(cardW * 3 / 2) + 68
 
     // ── Design tokens ─────────────────────────────────────────────────────
     readonly property color clrBackground:         Theme.bg
@@ -128,76 +139,18 @@ Item {
     // ─────────────────────────────────────────────────────────────────────
     // STATE: Unauthenticated — sign-in prompt
     // ─────────────────────────────────────────────────────────────────────
-    Item {
-        anchors.fill: parent
+    EmptyState {
+        anchors.centerIn: parent
         visible: !myListPage.isAuthenticated
-
-        Column {
-            anchors.centerIn: parent
-            spacing: 20
-            width: Math.max(0, Math.min(parent.width - 64, 360))
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "\u2605"
-                color: Qt.rgba(1, 1, 1, 0.13)
-                font { pixelSize: 64 }
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Sign in to view your list"
-                color: myListPage.clrOnSurface
-                font { family: Theme.displayFont; pixelSize: 22; weight: Font.DemiBold }
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                width: parent.width
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Keep track of the anime you love and pick up right where you left off."
-                color: myListPage.clrMuted
-                font { family: Theme.bodyFont; pixelSize: 14 }
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                width: parent.width
-            }
-
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: signInLabel.implicitWidth + 48
-                height: 44
-                radius: 8
-                color: signInMa.containsMouse ? "#ffffff" : "#e6e6e6"
-                border.width: 0
-
-                Behavior on color { ColorAnimation { duration: 160 } }
-
-                Text {
-                    id: signInLabel
-                    anchors.centerIn: parent
-                    text: authManager && authManager.signingIn ? "Signing In…" : "Sign In"
-                    color: "#0a0a0a"
-                    font { family: Theme.bodyFont; pixelSize: 14; weight: Font.DemiBold; letterSpacing: 0.5 }
-                }
-
-                MouseArea {
-                    id: signInMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    enabled: !(authManager && authManager.signingIn)
-                    onClicked: {
-                        if (authManager) authManager.signInWithBrowserBridge()
-                    }
-                }
-            }
-        }
+        glyph: "\uE8FD"
+        title: "Sign in to view your list"
+        body: "Keep track of the anime you love and pick up right where you left off."
+        actionLabel: authManager && authManager.signingIn ? "Signing in" : "Sign in"
+        onActionRequested: { if (authManager) authManager.signInWithBrowserBridge() }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // STATE: Loading — simple spinner (authenticated, empty list, timer not fired)
+    // STATE: Loading — poster-shaped skeletons in the grid's own metrics
     // ─────────────────────────────────────────────────────────────────────
     Item {
         anchors.fill: parent
@@ -205,86 +158,30 @@ Item {
                  && (myListPage.shows || []).length === 0
                  && !myListPage.emptyStateVisible
 
-        Column {
-            anchors.centerIn: parent
-            spacing: 16
-
-            // Simple animated spinner without BusyIndicator
-            Rectangle {
-                id: spinnerRing
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: 40; height: 40
-                radius: 20
-                color: "transparent"
-                border.color: myListPage.clrPrimary
-                border.width: 3
-                opacity: 0.7
-
-                Rectangle {
-                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter }
-                    width: 6; height: 6; radius: 3
-                    color: myListPage.clrPrimary
-                    anchors.topMargin: -3
-                }
-
-                RotationAnimator on rotation {
-                    from: 0; to: 360
-                    duration: 900
-                    loops: Animation.Infinite
-                    running: spinnerRing.visible
-                }
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Loading your list…"
-                color: myListPage.clrMuted
-                font { family: Theme.bodyFont; pixelSize: 14 }
-            }
+        SkeletonGrid {
+            anchors.fill: parent
+            anchors.topMargin: Theme.s6
+            columns: myListPage.gridCols
+            cardWidth: myListPage.cardW
+            gap: myListPage.cardGap
+            gutter: myListPage.gutter
+            rows: 2
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // STATE: Empty — timer fired, list still empty
     // ─────────────────────────────────────────────────────────────────────
-    Item {
-        anchors.fill: parent
+    EmptyState {
+        anchors.centerIn: parent
         visible: myListPage.isAuthenticated
                  && (myListPage.shows || []).length === 0
                  && myListPage.emptyStateVisible
-
-        Column {
-            anchors.centerIn: parent
-            spacing: 16
-            width: Math.max(0, Math.min(parent.width - 64, 360))
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "\u2605"
-                color: Qt.rgba(1, 1, 1, 0.11)
-                font { pixelSize: 56 }
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Your list is empty — add some shows!"
-                color: myListPage.clrOnSurface
-                font { family: Theme.displayFont; pixelSize: 20; weight: Font.DemiBold }
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                width: parent.width
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Browse or search for anime and tap the bookmark icon to save them here."
-                color: myListPage.clrMuted
-                font { family: Theme.bodyFont; pixelSize: 14 }
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                width: parent.width
-            }
-        }
+        glyph: "\uE8FD"
+        title: "Your list is empty"
+        body: "Browse or search for anime and add them here to keep track of where you are."
+        actionLabel: "Browse anime"
+        onActionRequested: myListPage.browseRequested()
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -301,9 +198,9 @@ Item {
                 top: parent.top
                 left: parent.left
                 right: parent.right
-                topMargin: 24
-                leftMargin: 24
-                rightMargin: 24
+                topMargin: myListPage.gutter
+                leftMargin: myListPage.gutter
+                rightMargin: myListPage.gutter
             }
             spacing: 24
 
@@ -423,18 +320,14 @@ Item {
             Flow {
                 id: gridFlow
                 width: parent.width
-                spacing: 16
+                spacing: myListPage.cardGap
 
                 Repeater {
                     model: myListPage.filteredShows
 
                     Item {
-                        width: {
-                            var availW = Math.max(400, resultsFlickable.width)
-                            var cols = Math.max(4, Math.min(5, Math.floor(availW / 190)))
-                            return Math.max(80, Math.floor((availW - 16 * (cols - 1)) / cols))
-                        }
-                        height: width * 3 / 2 + 68
+                        width: myListPage.cardW
+                        height: myListPage.cardH
 
                         AnimePosterCard {
                             anchors.fill: parent

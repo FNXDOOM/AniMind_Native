@@ -14,7 +14,11 @@ Column {
 
     signal actionRequested()
 
-    width: Math.min(implicitWidth, 380)
+    // An explicit measure, not implicitWidth: the text children bind their own
+    // width to the Column's, so deriving width from implicitWidth is a binding
+    // loop that QML resolves by collapsing the column to a few characters.
+    property int contentWidth: 380
+    width: contentWidth
     spacing: Theme.s4
 
     Text {
