@@ -4,6 +4,7 @@ import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Effects
+import Qt.labs.settings
 import Animind.Player 1.0
 import "."          // picks up qmldir → AniListApi singleton
 import "components"
@@ -88,7 +89,11 @@ ApplicationWindow {
 
     // Honour an explicit request for less movement. Qt 6 removed Qt.getenv(),
     // so this reads a launch flag instead of an environment variable.
-    readonly property bool reduceMotion: Qt.application.arguments.indexOf("--reduce-motion") !== -1
+    // Stored as a preference and overridable on the command line, which is how
+    // the screenshot harness keeps motion out of its captures.
+    property bool   motionReduced: false
+    readonly property bool reduceMotion: root.motionReduced
+            || Qt.application.arguments.indexOf("--reduce-motion") !== -1
 
     // ── Navigation state ──────────────────────────────────────────────────
     // Pages: "home" | "browse" | "simulcast" | "simulcastDetail" | "mylist" | "history" | "settings" | "player"
@@ -96,6 +101,28 @@ ApplicationWindow {
     // Owned here, not by the rail, so navW and the content column follow
     // the same animated value.
     property bool   railCollapsed: false
+
+    // Playback defaults the Settings page edits and the player obeys.
+    property real   volumeDefault: 0.5
+    property real   speedDefault:  1.0
+
+    Settings {
+        id: appSettings
+        category: "prefs"
+        property bool  reduceMotion: false
+        property real  volume:       0.5
+        property real  speed:        1.0
+    }
+
+    onMotionReducedChanged: appSettings.reduceMotion = motionReduced
+    onVolumeDefaultChanged: {
+        appSettings.volume = volumeDefault
+        video.command(["set", "volume", Math.round(volumeDefault * 100).toString()])
+    }
+    onSpeedDefaultChanged: {
+        appSettings.speed = speedDefault
+        video.command(["set", "speed", speedDefault.toString()])
+    }
     property bool   episodePanelOpen: false
     property bool   profileMenuOpen: false
     property var    playerEpisodes: []
@@ -819,8 +846,7 @@ ApplicationWindow {
         Loader {
             anchors.fill: parent
             active: root.currentPage === "settings"
-            // source: "pages/SettingsPage.qml"
-            sourceComponent: PlaceholderPage { pageTitle: "Settings" }
+            source: active ? "pages/SettingsPage.qml" : ""
         }
         Loader {
             id: searchLoader
@@ -1753,7 +1779,11 @@ ApplicationWindow {
     // STARTUP
     // ─────────────────────────────────────────────────────────────────────
     Component.onCompleted: {
-        video.command(["set","volume","50"])
+        root.motionReduced = appSettings.reduceMotion
+        root.volumeDefault = appSettings.volume
+        root.speedDefault  = appSettings.speed
+        video.command(["set", "volume", Math.round(root.volumeDefault * 100).toString()])
+        video.command(["set", "speed", root.speedDefault.toString()])
         focusSink.forceActiveFocus()
         if (root.reduceMotion)
             splash.opacity = 0.0
