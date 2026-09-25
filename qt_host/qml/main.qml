@@ -526,10 +526,12 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#0a0a0a"
+            // Section 25: a floating control, so it reads as glass over the
+            // page instead of a slab welded to the bottom edge.
+            color: Theme.glassSurface
             Rectangle {
                 anchors { top: parent.top; left: parent.left; right: parent.right }
-                height: 1; color: "#1f1f1f"
+                height: 1; color: Theme.glassEdge
             }
         }
 

@@ -41,6 +41,11 @@ QtObject {
     // Translucent scrim behind dialogs and the player chrome.
     readonly property color veil:          Qt.rgba(0, 0, 0, 0.72)
     readonly property color veilLight:     Qt.rgba(0, 0, 0, 0.45)
+    // Section 25 glass surfaces. Only the two floating layers qualify —
+    // the bottom tab bar and dialogs. Cards stay opaque on purpose.
+    readonly property color glassSurface: Qt.rgba(0.027, 0.035, 0.047, 0.86)
+    readonly property color glassPanel:   Qt.rgba(0.031, 0.043, 0.055, 0.94)
+    readonly property color glassEdge:    Qt.rgba(1, 1, 1, 0.10)
 
     // ── Type ──────────────────────────────────────────────────────────────
     readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"

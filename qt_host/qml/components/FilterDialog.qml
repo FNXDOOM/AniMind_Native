@@ -46,8 +46,8 @@ Rectangle {
         width: Math.min(620, parent.width - Theme.s8)
         height: Math.min(bodyColumn.implicitHeight + Theme.s12 + 60, parent.height - Theme.s8)
         radius: Theme.rXl
-        color: Theme.bgSecondary
-        border.color: Theme.borderDefault
+        color: Theme.glassPanel
+        border.color: Theme.glassEdge
         border.width: 1
 
         scale: dlg.open ? 1.0 : 0.96
