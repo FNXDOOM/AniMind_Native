@@ -1137,24 +1137,27 @@ ApplicationWindow {
     Rectangle {
         id: playerTopBar
         anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: root.topH; z: 7; color: "transparent"
+        height: root.topH; z: 7
+        // One scrim, one fade. The opacity and its Behavior were declared
+        // twice on this element, so two animations competed for the same
+        // property and the later one silently owned it.
+        gradient: Gradient {
+            orientation: Gradient.Vertical
+            GradientStop { position: 0.0; color: Theme.veil }
+            GradientStop { position: 0.7; color: Qt.rgba(0, 0, 0, 0.33) }
+            GradientStop { position: 1.0; color: "transparent" }
+        }
         visible: root.inPlayer
         opacity: root.chromeVisible ? 1.0 : 0.0
-        Behavior on opacity { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: Theme.dBase; easing.type: Theme.easeOutCubic } }
 
         HoverHandler {
             id: topBarHover
             onHoveredChanged: root.pointerOnChrome = topBarHover.hovered || botBarHover.hovered
         }
 
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: "#CC000000" }
-            GradientStop { position: 0.7; color: "#55000000" }
-            GradientStop { position: 1.0; color: "transparent" }
-        }
-        opacity: root.chromeVisible ? 1.0 : 0.0
-        Behavior on opacity { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+        // Section 25: the top overlay reads as a glass layer over the picture,
+        // so its fade uses the shared duration and easing tokens.
 
         Rectangle {
             id: backBtn
@@ -1208,8 +1211,14 @@ ApplicationWindow {
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 0.3; color: "#88000000" }
-                GradientStop { position: 1.0; color: "#EE000000" }
+                GradientStop { position: 0.3; color: Qt.rgba(0, 0, 0, 0.53) }
+                GradientStop { position: 1.0; color: Theme.glassPanel }
+            }
+            // The hairline is what makes it read as a floating layer rather
+            // than a fade to black.
+            Rectangle {
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 1; color: Theme.glassEdge
             }
         }
 
