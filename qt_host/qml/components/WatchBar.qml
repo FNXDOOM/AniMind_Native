@@ -1,7 +1,10 @@
 import QtQuick
 import ".."
 
-// Accent progress bar. This is one of the few places the red is allowed.
+// Watch progress bar. Named WatchBar rather than ProgressBar because
+// QtQuick.Controls already exports a ProgressBar, and a component that shadows
+// a Controls type is a trap in any file importing both. This is one of the few
+// places the red accent is allowed.
 Rectangle {
     id: bar
 

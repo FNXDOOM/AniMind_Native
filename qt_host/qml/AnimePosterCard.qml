@@ -162,7 +162,7 @@ Item {
             }
 
             // ── Watch progress: the accent, used where it means something ──
-            ProgressBar {
+            WatchBar {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: Theme.s2 }
                 visible: card.progress >= 0
                 value: Math.max(0, Math.min(1, card.progress))

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components"
 
 // HistoryPage — Watch history for the signed-in user.
 // Loaded by the `historyLoader` Loader in main.qml when currentPage === "history".
@@ -394,30 +395,9 @@ Item {
                         width: 120
                         spacing: 4
 
-                        ProgressBar {
+                        WatchBar {
                             width: parent.width
                             value: (rowRoot.modelData.progress_pct || 0) / 100
-                            from: 0.0
-                            to:   1.0
-
-                            background: Rectangle {
-                                implicitWidth: 120
-                                implicitHeight: 4
-                                color: "#1e1e1e"
-                                radius: 2
-                            }
-
-                            contentItem: Item {
-                                implicitWidth: 120
-                                implicitHeight: 4
-
-                                Rectangle {
-                                    width: parent.width * (rowRoot.modelData.progress_pct || 0) / 100
-                                    height: parent.height
-                                    radius: 2
-                                    color: root.clrAccent
-                                }
-                            }
                         }
 
                         Text {
