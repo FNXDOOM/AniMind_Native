@@ -241,7 +241,10 @@ Item {
             height: 21; radius: Theme.rSm
             width: epTxt.implicitWidth + Theme.s3
             readonly property bool isFresh: card.epText === "NEW EP"
-            color: isFresh ? Theme.accent : Theme.veilLight
+            // Still the quiet chip, but opaque: veilLight over bright artwork
+            // put the episode count at roughly the same luminance as the
+            // poster behind it, which made it unreadable on those cards.
+            color: isFresh ? Theme.accent : Theme.card
             border.color: isFresh ? Theme.accent : Theme.borderDefault
             border.width: 1
             Text {
