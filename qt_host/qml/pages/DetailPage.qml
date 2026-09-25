@@ -1022,6 +1022,7 @@ Rectangle {
                 width: parent.width; bars: 3; barHeight: 13
                 running: loadingPane.visible && !detailPage.calm
             }
+            SkeletonGrid { columns: 5; rows: 1; cardWidth: 160; gutter: 0 }
         }
     }
 

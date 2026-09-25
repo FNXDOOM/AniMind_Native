@@ -16,15 +16,24 @@ Item {
     property int gap: Theme.s4
     property int gutter: Theme.s6
 
-    implicitWidth: parent ? parent.width : 0
-    implicitHeight: parent ? parent.height : 0
+    // Size to the content, never to the parent. `implicitHeight: parent.height`
+    // is a layout loop when the grid sits in a Column: the Column takes its
+    // height from the grid and the grid takes its height from the Column. It
+    // whitened the whole Detail window; pages that use anchors.fill never saw
+    // it because the anchor overrides these bindings.
+    width: parent ? parent.width : 0
+    height: tiles.implicitHeight + gutter * 2
+    implicitWidth: width
+    implicitHeight: height
 
     Grid {
         id: tiles
         x: grid.gutter
         y: grid.gutter
+        width: grid.width - grid.gutter * 2
         columns: grid.columns
-        spacing: grid.gap
+        rowSpacing: grid.gap
+        columnSpacing: grid.gap
 
         Repeater {
             model: grid.columns * grid.rows
