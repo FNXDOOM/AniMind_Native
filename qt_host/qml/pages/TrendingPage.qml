@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
+import ".."
 
 Rectangle {
     id: trendingPage
@@ -41,7 +42,7 @@ Rectangle {
         Text {
             text: "Trending Now"
             color: "white"
-            font.family: "Segoe UI Variable Display, Segoe UI"
+            font.family: Theme.displayFont
             font.pixelSize: 26
             font.bold: true
         }

@@ -3,6 +3,7 @@ import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import ".."
 
 // HistoryPage — Watch history for the signed-in user.
 // Loaded by the `historyLoader` Loader in main.qml when currentPage === "history".
@@ -31,14 +32,14 @@ Item {
     property string errorText:      app ? app.watchHistoryError   : ""
 
     // ── Design tokens ──────────────────────────────────────────────────────
-    readonly property color clrBackground:  "#0a0a0a"
-    readonly property color clrPrimary:     "#e6e6e6"
-    readonly property color clrMuted:       "#b3b3b3"
-    readonly property color clrOnSurface:   "#f2f2f2"
-    readonly property color clrAccent:      "#ffffff"
-    readonly property color clrBorder:      "#141414"
-    readonly property color clrSurface:     "#141414"
-    readonly property color clrError:       "#ff6b6b"
+    readonly property color clrBackground:         Theme.bg
+    readonly property color clrPrimary:            Theme.textPrimary
+    readonly property color clrMuted:              Theme.textSecondary
+    readonly property color clrOnSurface:          Theme.textPrimary
+    readonly property color clrAccent:             Theme.textPrimary
+    readonly property color clrBorder:             Theme.borderDefault
+    readonly property color clrSurface:            Theme.card
+    readonly property color clrError:              Theme.accent
 
     // ── Background ─────────────────────────────────────────────────────────
     Rectangle {
@@ -124,7 +125,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.errorText
             color: root.clrError
-            font.family: "Segoe UI Variable Text, Segoe UI"
+            font.family: Theme.bodyFont
             font.pixelSize: 14
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignHCenter
@@ -146,7 +147,7 @@ Item {
                 anchors.centerIn: parent
                 text: "Retry"
                 color: "white"
-                font.family: "Segoe UI Variable Text, Segoe UI"
+                font.family: Theme.bodyFont
                 font.pixelSize: 14
                 font.bold: true
             }
@@ -174,7 +175,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "No watch history yet"
             color: root.clrOnSurface
-            font.family: "Segoe UI Variable Display, Segoe UI"
+            font.family: Theme.displayFont
             font.pixelSize: 20
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
@@ -184,7 +185,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Watch something to start building your history."
             color: root.clrMuted
-            font.family: "Segoe UI Variable Text, Segoe UI"
+            font.family: Theme.bodyFont
             font.pixelSize: 13
             horizontalAlignment: Text.AlignHCenter
         }
@@ -203,7 +204,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "Sign in to see your watch history"
             color: root.clrOnSurface
-            font.family: "Segoe UI Variable Display, Segoe UI"
+            font.family: Theme.displayFont
             font.pixelSize: 20
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
@@ -224,7 +225,7 @@ Item {
                 anchors.centerIn: parent
                 text: "Sign In"
                 color: "white"
-                font.family: "Segoe UI Variable Text, Segoe UI"
+                font.family: Theme.bodyFont
                 font.pixelSize: 15
                 font.bold: true
             }
@@ -263,7 +264,7 @@ Item {
             }
             text: "Watch History"
             color: root.clrOnSurface
-            font.family: "Segoe UI Variable Display, Segoe UI"
+            font.family: Theme.displayFont
             font.pixelSize: 26
             font.bold: true
         }
@@ -337,7 +338,7 @@ Item {
                             width: parent.width
                             text: rowRoot.modelData.show_title || ""
                             color: rowMa.containsMouse ? root.clrPrimary : root.clrOnSurface
-                            font.family: "Segoe UI Variable Display, Segoe UI"
+                            font.family: Theme.displayFont
                             font.pixelSize: 14
                             font.bold: true
                             elide: Text.ElideRight
@@ -348,7 +349,7 @@ Item {
                             width: parent.width
                             text: rowRoot.modelData.episode_label || ""
                             color: root.clrMuted
-                            font.family: "Segoe UI Variable Text, Segoe UI"
+                            font.family: Theme.bodyFont
                             font.pixelSize: 12
                             elide: Text.ElideRight
                         }
@@ -357,7 +358,7 @@ Item {
                             width: parent.width
                             text: root.relativeTime(rowRoot.modelData.last_watched || "")
                             color: Qt.rgba(0.886, 0.749, 0.690, 0.6)
-                            font.family: "Segoe UI Variable Text, Segoe UI"
+                            font.family: Theme.bodyFont
                             font.pixelSize: 11
                         }
                     }
@@ -377,7 +378,7 @@ Item {
                             width: parent.width
                             text: (rowRoot.modelData.progress_pct || 0) + "%"
                             color: root.clrMuted
-                            font.family: "Segoe UI Variable Text, Segoe UI"
+                            font.family: Theme.bodyFont
                             font.pixelSize: 10
                             horizontalAlignment: Text.AlignRight
                         }

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
 import "../components"
+import ".."
 
 // SearchPage — results with type tabs and a filters rail.
 //
@@ -29,9 +30,9 @@ Rectangle {
 
     signal seriesClicked(int anilistId)
 
-    readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"
-    readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
-    readonly property string iconFont:    "Segoe MDL2 Assets"
+    readonly property string displayFont:           Theme.displayFont
+    readonly property string bodyFont:              Theme.bodyFont
+    readonly property string iconFont:              Theme.iconFont
     readonly property int    gutter:      width < 640 ? 16 : (width < 1024 ? 24 : 32)
     // This is the content column, not the window: at the default 1280 window
     // the sidebar takes 208px, so a threshold above 1072 could never be met

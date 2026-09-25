@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 // TopBar — the content header. Desktop: global search pill, bell, avatar.
 // Compact: hamburger, brand, search icon, avatar. Primary navigation lives in
@@ -29,8 +30,8 @@ Item {
     readonly property color field:    "#141414"
     readonly property color hairline: "#262626"
     readonly property color muted:    "#8a8a8a"
-    readonly property string font:    "Segoe UI Variable Text, Segoe UI"
-    readonly property string icons:   "Segoe MDL2 Assets"
+    readonly property string font:    Theme.bodyFont
+    readonly property string icons:   Theme.iconFont
 
     // ── Hamburger, compact only ──────────────────────────────────────────
     Item {

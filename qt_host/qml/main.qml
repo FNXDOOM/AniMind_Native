@@ -7,6 +7,7 @@ import QtQuick.Effects
 import Animind.Player 1.0
 import "."          // picks up qmldir → AniListApi singleton
 import "components"
+import "."
 
 ApplicationWindow {
     id: root
@@ -528,14 +529,14 @@ ApplicationWindow {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: modelData.icon
                             color: tab.isActive ? "#ffffff" : "#8a8a8a"
-                            font.family: "Segoe MDL2 Assets"
+                            font.family: Theme.iconFont
                             font.pixelSize: 17
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: modelData.label
                             color: tab.isActive ? "#ffffff" : "#8a8a8a"
-                            font.family: "Segoe UI Variable Text, Segoe UI"
+                            font.family: Theme.bodyFont
                             font.pixelSize: 10
                             font.weight: tab.isActive ? Font.DemiBold : Font.Normal
                         }

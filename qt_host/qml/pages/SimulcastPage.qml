@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
+import ".."
 
 Rectangle {
     color: "#0a0a0a"
@@ -16,7 +17,7 @@ Rectangle {
         Text {
             text: "Simulcasts"
             color: "white"
-            font.family: "Segoe UI Variable Display, Segoe UI"
+            font.family: Theme.displayFont
             font.pixelSize: 24
             font.bold: true
         }

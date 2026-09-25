@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 // NotificationPanel — floating dropdown shown below the TopBar notification icon
 // Usage:
@@ -20,10 +21,10 @@ Rectangle {
     signal closeRequested()
 
     // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color clrPrimary:   "#e6e6e6"
-    readonly property color clrMuted:     "#b3b3b3"
-    readonly property color clrOnSurface: "#f2f2f2"
-    readonly property color clrBorder:    "#141414"
+    readonly property color clrPrimary:            Theme.textPrimary
+    readonly property color clrMuted:              Theme.textSecondary
+    readonly property color clrOnSurface:          Theme.textPrimary
+    readonly property color clrBorder:             Theme.borderDefault
 
     // ── Geometry ──────────────────────────────────────────────────────────
     width:  Math.max(280, contentColumn.implicitWidth + 32)
@@ -56,7 +57,7 @@ Rectangle {
             text: "Notifications"
             color: notificationPanel.clrPrimary
             font {
-                family: "Segoe UI Variable Display, Segoe UI"
+                family: Theme.displayFont
                 pixelSize: 14
                 weight:    Font.DemiBold
             }
@@ -82,7 +83,7 @@ Rectangle {
                 color:           notificationPanel.clrOnSurface
                 horizontalAlignment: Text.AlignHCenter
                 font {
-                    family: "Segoe UI Variable Text, Segoe UI"
+                    family: Theme.bodyFont
                     pixelSize: 13
                     weight:    Font.Normal
                 }
@@ -94,7 +95,7 @@ Rectangle {
                 color:           notificationPanel.clrMuted
                 horizontalAlignment: Text.AlignHCenter
                 font {
-                    family: "Segoe UI Variable Text, Segoe UI"
+                    family: Theme.bodyFont
                     pixelSize: 11
                     weight:    Font.Normal
                 }
@@ -111,7 +112,7 @@ Rectangle {
                 text:  modelData.message || ""
                 color: notificationPanel.clrOnSurface
                 font {
-                    family: "Segoe UI Variable Text, Segoe UI"
+                    family: Theme.bodyFont
                     pixelSize: 13
                 }
                 wrapMode: Text.WordWrap

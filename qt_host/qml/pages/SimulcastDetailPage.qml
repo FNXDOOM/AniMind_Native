@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import ".."
 
 Rectangle {
     id: page
@@ -113,7 +114,7 @@ Rectangle {
                     Text {
                         text: (showDetail.title || showTitle || "Show").toUpperCase()
                         color: "white"
-                        font.family: "Segoe UI Variable Display, Segoe UI"
+                        font.family: Theme.displayFont
                         font.pixelSize: 48 * page.s
                         font.weight: Font.Black
                         width: parent.width
@@ -167,7 +168,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 text: episodes.length > 0 ? "CONTINUE WATCHING E1" : "PLAY"
                                 color: "black"
-                                font.family: "Segoe UI Variable Display, Segoe UI"
+                                font.family: Theme.displayFont
                                 font.pixelSize: 20 * page.s
                                 font.bold: true
                             }
@@ -300,7 +301,7 @@ Rectangle {
                                   + " \u2013 "
                                   + (modelData.title || ("Episode " + String(index + 1)))
                             color: "white"
-                            font.family: "Segoe UI Variable Display, Segoe UI"
+                            font.family: Theme.displayFont
                             font.pixelSize: 16 * page.s
                             font.bold: true
                             wrapMode: Text.Wrap

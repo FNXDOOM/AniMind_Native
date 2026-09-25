@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Effects
+import "."
 
 // EpisodeThumbnailCard — 16:9 episode card with progress bar
 // Used in Continue Watching and Trending rows
@@ -87,7 +88,7 @@ Item {
                     anchors.centerIn: parent
                     text: card.duration
                     color: "white"
-                    font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 10; weight: Font.Medium }
+                    font { family: Theme.bodyFont; pixelSize: 10; weight: Font.Medium }
                 }
             }
         }
@@ -151,7 +152,7 @@ Item {
             width: parent.width
             text: card.title
             color: cardMa.containsMouse ? "#e6e6e6" : "#f2f2f2"
-            font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 15; weight: Font.DemiBold }
+            font { family: Theme.displayFont; pixelSize: 15; weight: Font.DemiBold }
             elide: Text.ElideRight
             Behavior on color { ColorAnimation { duration: 200 } }
         }
@@ -161,7 +162,7 @@ Item {
             width: parent.width
             text: card.episodeLabel
             color: "#b3b3b3"
-            font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 11; letterSpacing: 0.5 }
+            font { family: Theme.bodyFont; pixelSize: 11; letterSpacing: 0.5 }
             elide: Text.ElideRight
         }
     }

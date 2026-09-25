@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "."
 
 // SearchOverlay — full-screen search overlay
 // Triggered by TopBar search icon; z:50 so it sits above all page content.
@@ -113,7 +114,7 @@ Item {
                     border.width: 1
                 }
 
-                font.family: "Segoe UI Variable Text, Segoe UI"
+                font.family: Theme.bodyFont
                 font.pixelSize: 15
                 leftPadding:   12
                 rightPadding:  12
@@ -182,7 +183,7 @@ Item {
 
                 text:  "Type at least 2 characters to search"
                 color: "#b3b3b3"
-                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
+                font { family: Theme.bodyFont; pixelSize: 13 }
                 topPadding: 8
                 bottomPadding: 8
             }
@@ -198,7 +199,7 @@ Item {
 
                 text:  'No results for "' + searchOverlay.searchQuery + '"'
                 color: "#b3b3b3"
-                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
+                font { family: Theme.bodyFont; pixelSize: 13 }
                 topPadding: 8
                 bottomPadding: 8
             }
@@ -211,7 +212,7 @@ Item {
 
                 text:  searchOverlay.errorText
                 color: "#ff6b6b"
-                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13 }
+                font { family: Theme.bodyFont; pixelSize: 13 }
                 wrapMode: Text.Wrap
                 width: parent.width
                 topPadding: 8

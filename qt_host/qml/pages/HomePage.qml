@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
 import "../components"
+import ".."
 
 // HomePage — the screening room.
 // Colour and type values mirror the tokens declared in main.qml; they are
@@ -29,9 +30,9 @@ Rectangle {
     readonly property var app: Window.window
     readonly property var continueList: app ? app.watchHistory : []
 
-    readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"
-    readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
-    readonly property string iconFont:    "Segoe MDL2 Assets"
+    readonly property string displayFont:           Theme.displayFont
+    readonly property string bodyFont:              Theme.bodyFont
+    readonly property string iconFont:              Theme.iconFont
     readonly property int    gutter:      32
     readonly property bool   calm:        Qt.application.arguments.indexOf("--reduce-motion") !== -1
 

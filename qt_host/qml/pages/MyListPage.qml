@@ -3,6 +3,7 @@ import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
+import ".."
 
 // MyListPage — displays the authenticated user's saved anime list
 // Public API:
@@ -75,11 +76,11 @@ Item {
     }
 
     // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color clrBackground: "#0a0a0a"
-    readonly property color clrPrimary:    "#e6e6e6"
-    readonly property color clrOnSurface:  "#f2f2f2"
-    readonly property color clrMuted:      "#b3b3b3"
-    readonly property color clrSurface:    "#141414"
+    readonly property color clrBackground:         Theme.bg
+    readonly property color clrPrimary:            Theme.textPrimary
+    readonly property color clrOnSurface:          Theme.textPrimary
+    readonly property color clrMuted:              Theme.textSecondary
+    readonly property color clrSurface:            Theme.card
 
     // ── Loading → empty timeout ───────────────────────────────────────────
     Timer {
@@ -147,7 +148,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Sign in to view your list"
                 color: myListPage.clrOnSurface
-                font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 22; weight: Font.DemiBold }
+                font { family: Theme.displayFont; pixelSize: 22; weight: Font.DemiBold }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -157,7 +158,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Keep track of the anime you love and pick up right where you left off."
                 color: myListPage.clrMuted
-                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14 }
+                font { family: Theme.bodyFont; pixelSize: 14 }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -178,7 +179,7 @@ Item {
                     anchors.centerIn: parent
                     text: authManager && authManager.signingIn ? "Signing In…" : "Sign In"
                     color: "#0a0a0a"
-                    font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14; weight: Font.DemiBold; letterSpacing: 0.5 }
+                    font { family: Theme.bodyFont; pixelSize: 14; weight: Font.DemiBold; letterSpacing: 0.5 }
                 }
 
                 MouseArea {
@@ -238,7 +239,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Loading your list…"
                 color: myListPage.clrMuted
-                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14 }
+                font { family: Theme.bodyFont; pixelSize: 14 }
             }
         }
     }
@@ -268,7 +269,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Your list is empty — add some shows!"
                 color: myListPage.clrOnSurface
-                font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 20; weight: Font.DemiBold }
+                font { family: Theme.displayFont; pixelSize: 20; weight: Font.DemiBold }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -278,7 +279,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Browse or search for anime and tap the bookmark icon to save them here."
                 color: myListPage.clrMuted
-                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 14 }
+                font { family: Theme.bodyFont; pixelSize: 14 }
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 width: parent.width
@@ -314,7 +315,7 @@ Item {
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     text: "My List"
                     color: myListPage.clrOnSurface
-                    font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 28; weight: Font.Bold }
+                    font { family: Theme.displayFont; pixelSize: 28; weight: Font.Bold }
                 }
 
                 TextField {
@@ -338,7 +339,7 @@ Item {
                         border.width: 1
                     }
 
-                    font.family: "Segoe UI Variable Text, Segoe UI"
+                    font.family: Theme.bodyFont
                     font.pixelSize: 14
                     leftPadding: 12
                     rightPadding: 12
@@ -387,7 +388,7 @@ Item {
                                     return modelData + " (" + count + ")"
                                 }
                                 color: isSelected ? "#0a0a0a" : myListPage.clrMuted
-                                font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 13; weight: isSelected ? Font.DemiBold : Font.Normal }
+                                font { family: Theme.bodyFont; pixelSize: 13; weight: isSelected ? Font.DemiBold : Font.Normal }
                             }
                             
                             MouseArea {
@@ -481,7 +482,7 @@ Item {
             visible: (myListPage.filteredShows || []).length === 0
             text: myListPage.searchQuery ? "No results found for \"" + myListPage.searchQuery + "\"" : "No items found in \"" + myListPage.currentTab + "\"."
             color: myListPage.clrMuted
-            font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 16 }
+            font { family: Theme.bodyFont; pixelSize: 16 }
         }
     }
 }

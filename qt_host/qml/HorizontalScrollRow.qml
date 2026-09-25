@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
+import "."
 
 // HorizontalScrollRow — section header + horizontal ListView of cards
 // Usage:
@@ -35,13 +36,13 @@ Item {
             Layout.fillWidth: true
             text: scrollRow.sectionTitle
             color: "white"
-            font { family: "Segoe UI Variable Display, Segoe UI"; pixelSize: 20; weight: Font.DemiBold }
+            font { family: Theme.displayFont; pixelSize: 20; weight: Font.DemiBold }
         }
 
         Text {
             text: "View All"
             color: "#e6e6e6"
-            font { family: "Segoe UI Variable Text, Segoe UI"; pixelSize: 12; letterSpacing: 0.5 }
+            font { family: Theme.bodyFont; pixelSize: 12; letterSpacing: 0.5 }
 
             MouseArea {
                 anchors.fill: parent

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
 import "../"
+import ".."
 
 // DetailPage — a series title card with tabbed detail below.
 //
@@ -23,9 +24,9 @@ Rectangle {
     signal addToListRequested(int id)
     signal episodePlayRequested(string url, string title, string episodeLabel, string thumbnailUrl)
 
-    readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"
-    readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
-    readonly property string iconFont:    "Segoe MDL2 Assets"
+    readonly property string displayFont:           Theme.displayFont
+    readonly property string bodyFont:              Theme.bodyFont
+    readonly property string iconFont:              Theme.iconFont
     readonly property int    gutter:      width < 640 ? 16 : (width < 1024 ? 24 : 32)
     readonly property bool   calm:        Qt.application.arguments.indexOf("--reduce-motion") !== -1
 
