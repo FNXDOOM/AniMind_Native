@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
+import "../components"
 
 // BrowsePage — genre-first discovery, matching the reference: page title, a
 // row of genre chips, then a responsive poster grid. The previous filter bar
@@ -244,20 +245,22 @@ Rectangle {
 
     // ── Loading ──────────────────────────────────────────────────────────
     Rectangle {
-        anchors.fill: parent
-        color: "#0a0a0a"
+        // Starts where the grid starts, so the page keeps its title and genre
+        // chips while loading instead of blanking them out.
+        anchors { top: parent.top; topMargin: browsePage.headerH
+                  left: parent.left; right: parent.right; bottom: parent.bottom }
+        color: Theme.bg
         visible: browsePage.loading
-        Rectangle {
-            anchors.centerIn: parent
-            width: 32; height: 32; radius: 16
-            color: "transparent"
-            border.color: "#ffffff"; border.width: 2
-            opacity: 0.7
-            RotationAnimator on rotation {
-                from: 0; to: 360; duration: 900
-                loops: Animation.Infinite
-                running: parent.visible
-            }
+
+        // Same columns, gutters and card width as the real GridView, so the
+        // results replace the placeholders without reflowing.
+        SkeletonGrid {
+            anchors.fill: parent
+            columns: browsePage.gridCols
+            cardWidth: browsePage.cardW
+            gap: browsePage.cardGap
+            gutter: browsePage.gutter
+            rows: 3
         }
     }
 

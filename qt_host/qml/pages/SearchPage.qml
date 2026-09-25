@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
+import "../components"
 
 // SearchPage — results with type tabs and a filters rail.
 //
@@ -582,18 +583,62 @@ Rectangle {
     // ── States ──────────────────────────────────────────────────────────
     Rectangle {
         anchors.fill: parent
-        color: "#0a0a0a"
+        color: Theme.bg
         visible: searchPage.loading
+
+        // Mirrors the result row: 64px square artwork, a title line and two
+        // synopsis lines, so the list does not jump when real rows arrive.
+        Column {
+            id: skelRows
+            anchors { top: parent.top; left: parent.left; right: parent.right }
+            anchors.topMargin: 20; anchors.leftMargin: searchPage.gutter
+            anchors.rightMargin: searchPage.gutter
+            spacing: Theme.s5
+
+            Repeater {
+                model: 6
+                Item {
+                    required property int index
+                    width: skelRows.width
+                    height: 88
+
+                    Row {
+                        anchors.fill: parent
+                        spacing: Theme.s4
+
+                        Rectangle {
+                            width: 64; height: 88; radius: Theme.rMd
+                            color: Theme.surfaceRaised
+                        }
+                        Column {
+                            width: skelRows.width - 64 - searchPage.gutter * 2 - Theme.s4
+                            spacing: Theme.s2
+                            Rectangle { width: parent.width * 0.55; height: 15; radius: Theme.rSm; color: Theme.surfaceRaised }
+                            Rectangle { width: parent.width * 0.28; height: 11; radius: Theme.rSm; color: Theme.card }
+                            Rectangle { width: parent.width * 0.94; height: 11; radius: Theme.rSm; color: Theme.card }
+                            Rectangle { width: parent.width * 0.72; height: 11; radius: Theme.rSm; color: Theme.card }
+                        }
+                    }
+                }
+            }
+        }
+
         Rectangle {
-            anchors.centerIn: parent
-            width: 32; height: 32; radius: 16
-            color: "transparent"
-            border.color: "#ffffff"; border.width: 2
-            opacity: 0.7
-            RotationAnimator on rotation {
-                from: 0; to: 360; duration: 900
+            id: skelSweep
+            width: parent.width * 0.3
+            height: parent.height
+            x: -width
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0) }
+                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.035) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0) }
+            }
+            SequentialAnimation on x {
                 loops: Animation.Infinite
-                running: parent.visible
+                running: searchPage.visible && searchPage.loading
+                NumberAnimation { from: -skelSweep.width; to: searchPage.width; duration: 1500; easing.type: Easing.InOutQuad }
+                PauseAnimation { duration: 300 }
             }
         }
     }
