@@ -63,7 +63,10 @@ Item {
     // ── State helpers ─────────────────────────────────────────────────────
     property bool emptyStateVisible: false
 
-    readonly property bool isAuthenticated: authManager ? authManager.authenticated : false
+    readonly property bool isAuthenticated: auth ? auth.authenticated : false
+    // Reached through typeof so a missing or null authManager cannot throw the
+    // binding away — see the same guard in HistoryPage.
+    readonly property var  auth: typeof authManager !== "undefined" ? authManager : null
 
     // The watchlist rows carry no watched/total episode count, so this shows
     // only what is actually stored rather than inventing a progress figure.
@@ -145,8 +148,8 @@ Item {
         glyph: "\uE8FD"
         title: "Sign in to view your list"
         body: "Keep track of the anime you love and pick up right where you left off."
-        actionLabel: authManager && authManager.signingIn ? "Signing in" : "Sign in"
-        onActionRequested: { if (authManager) authManager.signInWithBrowserBridge() }
+        actionLabel: auth && auth.signingIn ? "Signing in" : "Sign in"
+        onActionRequested: { if (auth) auth.signInWithBrowserBridge() }
     }
 
     // ─────────────────────────────────────────────────────────────────────

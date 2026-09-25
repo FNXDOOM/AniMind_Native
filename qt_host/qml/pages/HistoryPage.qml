@@ -64,8 +64,15 @@ Item {
 
     // ── State helpers ──────────────────────────────────────────────────────
     // Determine which visual state to show.
+    //
+    // `auth` goes through typeof rather than naming authManager directly: a
+    // bare reference to an identifier that is not in scope throws, which leaves
+    // pageState an empty string, and no state block matches "" — so the whole
+    // page rendered nothing at all. The guard also covers authManager being
+    // registered as null.
+    readonly property var auth: typeof authManager !== "undefined" ? authManager : null
     readonly property string pageState: {
-        if (!authManager || !authManager.authenticated) return "unauthenticated"
+        if (!auth || !auth.authenticated)               return "unauthenticated"
         if (isLoading)                                  return "loading"
         if (errorText !== "")                           return "error"
         if (historyEntries.length === 0)                return "empty"
