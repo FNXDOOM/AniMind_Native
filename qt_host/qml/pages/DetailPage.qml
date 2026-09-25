@@ -18,6 +18,9 @@ Rectangle {
     property bool loading: false
     property string errorMsg: ""
     property string tab: "episodes"      // episodes | details | similar
+    // Where the sliding underline sits; each tab publishes its own geometry.
+    property real   tabIndX: 0
+    property real   tabIndW: 0
 
     signal backRequested()
     signal playRequested(int id, string title)
@@ -57,6 +60,8 @@ Rectangle {
             flick.contentY = 0
         })
     }
+
+    onTabChanged: if (!detailPage.calm) tabSwitch.restart()
 
     onSeriesIdChanged: loadDetail()
     Component.onCompleted: loadDetail()
@@ -485,7 +490,21 @@ Rectangle {
                     height: 1; color: "#1f1f1f"
                 }
 
+                // One underline that slides between tabs instead of a separate
+                // bar per tab, so the change reads as movement rather than a blink.
+                Rectangle {
+                    id: tabIndicator
+                    anchors.bottom: parent.bottom
+                    x: tabRow.x + detailPage.tabIndX
+                    width: detailPage.tabIndW
+                    height: 2; radius: 1
+                    color: Theme.textPrimary
+                    Behavior on x { NumberAnimation { duration: Theme.dBase; easing.type: Theme.easeOutCubic } }
+                    Behavior on width { NumberAnimation { duration: Theme.dBase; easing.type: Theme.easeOutCubic } }
+                }
+
                 Row {
+                    id: tabRow
                     anchors { left: parent.left; bottom: parent.bottom }
                     spacing: 26
                     Repeater {
@@ -515,10 +534,19 @@ Rectangle {
                                 font.weight: tabItem.isOn ? Font.DemiBold : Font.Normal
                                 Behavior on color { ColorAnimation { duration: 130 } }
                             }
-                            Rectangle {
-                                anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                                height: 2; radius: 1; color: "#ffffff"
-                                visible: tabItem.isOn
+                            // Publish geometry while active so the shared underline
+                            // can slide to it.
+                            onIsOnChanged: {
+                                if (tabItem.isOn) {
+                                    detailPage.tabIndX = tabItem.x
+                                    detailPage.tabIndW = tabItem.width
+                                }
+                            }
+                            Component.onCompleted: {
+                                if (tabItem.isOn) {
+                                    detailPage.tabIndX = tabItem.x
+                                    detailPage.tabIndW = tabItem.width
+                                }
                             }
                             MouseArea {
                                 id: tabMa
@@ -541,6 +569,23 @@ Rectangle {
                 y: tabBar.y + tabBar.height + 22
                 width: Math.min(canvas.width - detailPage.gutter * 2, 1000)
                 spacing: 28
+
+                transform: Translate { id: contentShift; y: 0 }
+
+                // Only the incoming panel animates. Fading the outgoing one in
+                // place would need it to stay visible, and the Column lays out
+                // visible children, so the page would jump mid-transition.
+                SequentialAnimation {
+                    id: tabSwitch
+                    ParallelAnimation {
+                        NumberAnimation { target: contentCol; property: "opacity"
+                                          from: 0.0; to: 1.0
+                                          duration: Theme.dBase; easing.type: Theme.easeOutCubic }
+                        NumberAnimation { target: contentShift; property: "y"
+                                          from: Theme.s4; to: 0
+                                          duration: Theme.dBase; easing.type: Theme.easeOutCubic }
+                    }
+                }
 
                 // ── Episodes ────────────────────────────────────────────
                 Column {
