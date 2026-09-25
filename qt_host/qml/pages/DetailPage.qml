@@ -44,6 +44,32 @@ Rectangle {
     readonly property int posterW:   Math.round(fluid(132, 210, 560, 1500))
 
     // ── Data ────────────────────────────────────────────────────────────
+    // Dates come back as {year, month, day}; a missing end date means the show
+    // is still airing, so the range says so rather than trailing off.
+    readonly property var monthNames: ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    function fmtDate(d) {
+        if (!d || !d.year) return ""
+        var mo = (d.month && d.month >= 1 && d.month <= 12) ? monthNames[d.month - 1] : ""
+        return mo + " " + (d.day || 1) + ", " + d.year
+    }
+
+    function factRows() {
+        var m = detailPage.detail
+        if (!m) return []
+        var out = []
+        var romaji = (m.title && m.title.romaji) ? m.title.romaji : ""
+        if (romaji !== "") out.push({ k: "Original title", v: romaji })
+        var from = detailPage.fmtDate(m.startDate)
+        var to = detailPage.fmtDate(m.endDate)
+        if (from !== "")
+            out.push({ k: "Aired", v: to !== "" ? from + " - " + to : from + " - present" })
+        out.push({ k: "Episodes", v: m.episodes ? String(m.episodes) : "Ongoing" })
+        var st = AniListApi.statusLabel(m)
+        if (st !== "") out.push({ k: "Status", v: st })
+        return out
+    }
+
     function loadDetail() {
         if (seriesId <= 0)
             return
@@ -217,6 +243,123 @@ Rectangle {
                         GradientStop { position: 0.00; color: Qt.rgba(0.04, 0.04, 0.04, 0.55) }
                         GradientStop { position: 0.35; color: "transparent" }
                         GradientStop { position: 1.00; color: "#0a0a0a" }
+                    }
+                }
+            }
+
+            // Reference panel 2: a summary rail over the right of the banner, so
+            // the facts that answer "should I start this?" are on screen without
+            // opening the Details tab. Hidden below 900px, where the banner has
+            // no room for it.
+            Column {
+                id: infoRail
+                anchors { top: banner.top; right: banner.right
+                          topMargin: Theme.s6; rightMargin: Theme.gutterFor(detailPage.width) }
+                width: 240
+                spacing: Theme.s5
+                visible: detailPage.detail !== null && detailPage.width >= 900
+                opacity: detailPage.detail ? 1.0 : 0.0
+                Behavior on opacity {
+                    NumberAnimation { duration: detailPage.calm ? 0 : Theme.dSlow
+                                                      easing.type: Theme.easeOutCubic }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 8
+                    Text {
+                        text: "Genres"
+                        color: Theme.textMuted
+                        font.family: Theme.bodyFont
+                        font.pixelSize: Theme.tsSmall
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: Theme.trackingWide
+                    }
+                    Flow {
+                        width: parent.width
+                        spacing: 6
+                        Repeater {
+                            model: detailPage.detail && detailPage.detail.genres
+                                   ? detailPage.detail.genres.slice(0, 3) : []
+                            delegate: Rectangle {
+                                required property var modelData
+                                height: 26
+                                width: genreTxt.implicitWidth + 20
+                                radius: Theme.rPill
+                                color: Theme.glassPanel
+                                border.color: Theme.borderDefault; border.width: 1
+                                Text {
+                                    id: genreTxt
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    color: Theme.textSecondary
+                                    font.family: Theme.bodyFont
+                                    font.pixelSize: Theme.tsSmall
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 8
+                    Text {
+                        text: "Studio"
+                        color: Theme.textMuted
+                        font.family: Theme.bodyFont
+                        font.pixelSize: Theme.tsSmall
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: Theme.trackingWide
+                    }
+                    Text {
+                        width: parent.width
+                        text: detailPage.detail ? AniListApi.studio(detailPage.detail) : ""
+                        visible: text.length > 0
+                        color: Theme.textPrimary
+                        font.family: Theme.bodyFont
+                        font.pixelSize: Theme.tsBody
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 8
+                    Text {
+                        text: "More info"
+                        color: Theme.textMuted
+                        font.family: Theme.bodyFont
+                        font.pixelSize: Theme.tsSmall
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: Theme.trackingWide
+                    }
+                    Column {
+                        width: parent.width
+                        spacing: 6
+                        Repeater {
+                            model: detailPage.factRows()
+                            delegate: Row {
+                                required property var modelData
+                                width: parent.width
+                                spacing: Theme.s3
+                                Text {
+                                    width: 92
+                                    text: modelData.k
+                                    color: Theme.textMuted
+                                    font.family: Theme.bodyFont
+                                    font.pixelSize: Theme.tsSmall
+                                }
+                                Text {
+                                    width: parent.width - 92 - parent.spacing
+                                    text: modelData.v
+                                    color: Theme.textSecondary
+                                    font.family: Theme.bodyFont
+                                    font.pixelSize: Theme.tsSmall
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
                     }
                 }
             }
