@@ -864,7 +864,13 @@ ApplicationWindow {
             source: active ? "pages/SearchPage.qml" : ""
             onLoaded: {
                 if (!item || !item.seriesClicked) return
-                if (item.initialQuery !== undefined) item.initialQuery = root.searchQuery
+                if (item.initialQuery !== undefined) {
+                    // Live, like the detail id. Copied once, the header's search
+                    // field stopped reaching a Search page that was already
+                    // open, which also made the page's own
+                    // onInitialQueryChanged handler unreachable.
+                    item.initialQuery = Qt.binding(function() { return root.searchQuery })
+                }
                 item.seriesClicked.connect(function(anilistId) {
                     root.currentSeriesId = anilistId
                     root.previousPage = root.currentPage
