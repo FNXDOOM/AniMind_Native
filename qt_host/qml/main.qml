@@ -136,6 +136,9 @@ ApplicationWindow {
     property var    toasts: []
     property int    toastSeq: 0
     property int    playerEpisodesFor: -1
+    // The sidebar marks the playing episode by matching its url against this.
+    // It was never assigned, so the current episode was never highlighted.
+    property string mediaUrl: ""
     property string previousPage: "home"
     property var currentSeriesId: 0
     property string currentCloudShowId: ""
@@ -248,6 +251,7 @@ ApplicationWindow {
         root.showTitle = titleStr || "Animind Player"
         root.episodeLabel = epLabel || ""
         root.currentThumbnailUrl = thumbUrl || ""
+        root.mediaUrl = url
         root.currentPage = "player"
         root.isPlaying = true
         focusSink.forceActiveFocus()
@@ -1307,8 +1311,17 @@ ApplicationWindow {
                         onClicked: { video.command(["cycle","pause"]); root.isPlaying = !root.isPlaying } }
                 }
 
-                PlayerIconBtn { glyph: "\uE100"; glyphIcon: true; tip: "Previous Episode"; onClicked: {} }
-                PlayerIconBtn { glyph: "\uE101"; glyphIcon: true; tip: "Next Episode";     onClicked: {} }
+                PlayerIconBtn {
+                    glyph: "\uE100"; glyphIcon: true; tip: "Previous episode"
+                    enabled: root.currentEpisodeIndex > 0
+                    onClicked: root.stepEpisode(-1)
+                }
+                PlayerIconBtn {
+                    glyph: "\uE101"; glyphIcon: true; tip: "Next episode"
+                    enabled: root.currentEpisodeIndex >= 0
+                             && root.currentEpisodeIndex < root.playerEpisodes.length - 1
+                    onClicked: root.stepEpisode(1)
+                }
 
                 // Volume (to the right of forward button)
                 Item {
@@ -1509,6 +1522,7 @@ ApplicationWindow {
         property bool   glyphIcon: false
         property string tip:   ""
         signal clicked()
+        opacity: pib.enabled ? 1.0 : 0.35
         Rectangle {
             anchors.fill: parent; radius: 18
             color: pibMa.containsMouse ? "#33FFFFFF" : "#14000000"
@@ -1681,13 +1695,7 @@ ApplicationWindow {
         calm: root.reduceMotion
         episodes: root.playerEpisodes
         seriesTitle: root.showTitle
-        currentIndex: {
-            for (var i = 0; i < root.playerEpisodes.length; i++) {
-                var e = root.playerEpisodes[i]
-                if (e && e.url && e.url === root.mediaUrl) return i
-            }
-            return -1
-        }
+        currentIndex: root.currentEpisodeIndex
         onDismissed: root.episodePanelOpen = false
         onEpisodePicked: (url, title, label, thumb) => {
             root.playStreamNow(url, title, label, thumb)
@@ -1801,6 +1809,25 @@ ApplicationWindow {
     }
 
     function hideTimerRestart() { hideTimer.restart() }
+
+    // One lookup shared by the episode sidebar's highlight and the transport's
+    // previous/next buttons.
+    readonly property int currentEpisodeIndex: {
+        for (var i = 0; i < playerEpisodes.length; i++) {
+            var e = playerEpisodes[i]
+            if (e && e.url && e.url === mediaUrl) return i
+        }
+        return -1
+    }
+
+    function stepEpisode(delta) {
+        var i = root.currentEpisodeIndex + delta
+        if (root.currentEpisodeIndex < 0 || i < 0 || i >= root.playerEpisodes.length)
+            return
+        var e = root.playerEpisodes[i]
+        if (!e || !e.url) return
+        root.playStreamNow(e.url, root.showTitle, "Episode " + (i + 1), e.thumbnail || "")
+    }
 
     function goSearch() {
         // Every other navigation records where it came from; this one did not,
