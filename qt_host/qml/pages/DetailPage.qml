@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import "../components"
 import QtQuick.Layouts
 import QtQuick.Effects
 import "../"
@@ -977,52 +976,22 @@ Rectangle {
     }
 
     // ── Loading ─────────────────────────────────────────────────────────
-    // A hero-shaped skeleton, not a spinner: it previews the layout the
-    // response fills in, so nothing jumps when the data lands (section 26).
     Rectangle {
         id: loadingPane
         anchors.fill: parent
-        color: Theme.bg
+        color: "#0a0a0a"
         visible: detailPage.loading || (detailPage.detail === null && detailPage.errorMsg === "")
-        clip: true
-
         Rectangle {
-            id: skHero
-            anchors { left: parent.left; right: parent.right; top: parent.top }
-            height: Math.max(240, Math.min(parent.height * 0.58, 360))
-            color: Theme.card
-
-            Rectangle {
-                id: skPoster
-                anchors { left: parent.left; leftMargin: Theme.s8; bottom: parent.bottom
-                          bottomMargin: Theme.s8 }
-                width: 148; height: 210
-                color: Theme.surfaceRaised
-            }
-            Column {
-                anchors { left: skPoster.right; right: parent.right
-                          bottom: skPoster.bottom; leftMargin: Theme.s6; rightMargin: Theme.s8 }
-                spacing: Theme.s3
-                Skeleton {
-                    width: parent.width * 0.72; bars: 2; barHeight: 26
-                    running: loadingPane.visible && !detailPage.calm
-                }
-                Skeleton {
-                    width: parent.width * 0.44; bars: 1; barHeight: 14
-                    running: loadingPane.visible && !detailPage.calm
-                }
-            }
-        }
-
-        Column {
-            anchors { left: parent.left; right: parent.right; top: skHero.bottom
-                      topMargin: Theme.s8; leftMargin: Theme.s8; rightMargin: Theme.s8 }
-            spacing: Theme.s6
-            Skeleton {
-                width: parent.width; bars: 3; barHeight: 13
+            anchors.centerIn: parent
+            width: 34; height: 34; radius: 17
+            color: "transparent"
+            border.color: "#ffffff"; border.width: 2
+            opacity: 0.7
+            RotationAnimator on rotation {
+                from: 0; to: 360; duration: 900
+                loops: Animation.Infinite
                 running: loadingPane.visible && !detailPage.calm
             }
-            SkeletonGrid { columns: 5; rows: 1; cardWidth: 160; gutter: 0 }
         }
     }
 
