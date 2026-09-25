@@ -208,16 +208,29 @@ Rectangle {
         visible: searchPage.showRail
         anchors { top: head.bottom; topMargin: 22; right: parent.right; rightMargin: searchPage.gutter }
         width: searchPage.railW
-        height: railCol.implicitHeight + 32
+        // The whole option set is taller than a 760px window and the rail is
+        // anchored to the page top, so the tail of the year list fell off the
+        // bottom of the screen. Take what the page offers, scroll the rest.
+        height: Math.min(railCol.implicitHeight + 32,
+                         searchPage.height - rail.y - searchPage.gutter)
         radius: 10
         color: "#111111"
         border.color: "#242424"; border.width: 1
+        clip: true
+
+        Flickable {
+            id: railScroll
+            anchors { fill: parent; leftMargin: 16; rightMargin: 6; topMargin: 16; bottomMargin: 16 }
+            contentWidth: width
+            contentHeight: railCol.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
         Column {
             id: railCol
-            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 16 }
+            width: railScroll.width
             spacing: 16
-            width: parent.width - 32
 
             Row {
                 width: parent.width
@@ -401,6 +414,7 @@ Rectangle {
                     onClicked: searchPage.resetFilters()
                 }
             }
+        }
         }
     }
 
