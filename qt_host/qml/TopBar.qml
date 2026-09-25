@@ -27,9 +27,9 @@ Item {
 
     height: compact ? 56 : 64
 
-    readonly property color field:    "#141414"
-    readonly property color hairline: "#262626"
-    readonly property color muted:    "#8a8a8a"
+    readonly property color field:    Theme.input
+    readonly property color hairline: Theme.borderDefault
+    readonly property color muted:    Theme.textMuted
     readonly property string font:    Theme.bodyFont
     readonly property string icons:   Theme.iconFont
 
@@ -83,13 +83,17 @@ Item {
         id: searchPill
         visible: !bar.compact
         anchors { left: parent.left; leftMargin: 24; verticalCenter: parent.verticalCenter }
-        width: Math.min(560, Math.max(220, parent.width - 220))
+        readonly property int baseWidth: Math.min(560, Math.max(220, parent.width - 220))
+        width: baseWidth + (searchInput.activeFocus ? Theme.s6 : 0)
         height: 40
         radius: 20
-        color: bar.field
-        border.color: searchInput.activeFocus ? "#4a4a4a" : bar.hairline
+        color: searchInput.activeFocus ? Theme.surfaceRaised : bar.field
+        border.color: searchInput.activeFocus ? Theme.borderStrong : bar.hairline
         border.width: 1
-        Behavior on border.color { ColorAnimation { duration: 140 } }
+
+        Behavior on width { NumberAnimation { duration: Theme.dBase; easing.type: Theme.easeOutCubic } }
+        Behavior on color { ColorAnimation { duration: Theme.dBase } }
+        Behavior on border.color { ColorAnimation { duration: Theme.dBase } }
 
         RowLayout {
             anchors { fill: parent; leftMargin: 14; rightMargin: 10 }
@@ -208,10 +212,15 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: 17
-            color: "#1e1e1e"
-            border.color: (authManager && authManager.authenticated) ? "#ffffff" : bar.hairline
+            color: avatarHover.hovered ? Theme.surfaceRaised : Theme.card
+            border.color: (authManager && authManager.authenticated)
+                          ? Theme.accent : bar.hairline
             border.width: 1
+            Behavior on color { ColorAnimation { duration: Theme.dFast } }
+            Behavior on border.color { ColorAnimation { duration: Theme.dFast } }
         }
+
+        HoverHandler { id: avatarHover }
 
         Text {
             anchors.centerIn: parent
@@ -247,9 +256,7 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onClicked: {
                 avatarBtn.forceActiveFocus()
-                if (!authManager) return
-                if (authManager.authenticated) authManager.signOut()
-                else authManager.signInWithBrowserBridge()
+                bar.profileClicked()
             }
         }
     }

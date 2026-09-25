@@ -97,6 +97,7 @@ ApplicationWindow {
     // the same animated value.
     property bool   railCollapsed: false
     property bool   episodePanelOpen: false
+    property bool   profileMenuOpen: false
     property var    playerEpisodes: []
     // One copy of the watch history for the whole app: the Continue Watching
     // row on Home and the HistoryPage both read this, instead of each issuing
@@ -476,7 +477,7 @@ ApplicationWindow {
         onNavLinkClicked: (page) => root.currentPage = page
         onSearchClicked:  root.currentPage = "search"
         onMenuClicked:    root.drawerOpen = !root.drawerOpen
-        onProfileClicked: {}
+        onProfileClicked: root.profileMenuOpen = !root.profileMenuOpen
         onNotificationsClicked: root.notifPanelOpen = !root.notifPanelOpen
         onQuerySubmitted: (text) => {
             root.searchQuery = text
@@ -1462,6 +1463,55 @@ ApplicationWindow {
 
     // ─────────────────────────────────────────────────────────────────────
     // NON-PLAYER ESCAPE KEY HANDLER
+    // ── Profile menu ────────────────────────────────────────────────────
+    MouseArea {
+        anchors.fill: parent
+        z: 54
+        enabled: root.profileMenuOpen
+        propagateComposedEvents: true
+        onPressed: function(mouse) {
+            if (!profileMenu.contains(profileMenu.mapFromItem(null, mouse.x, mouse.y)))
+                root.profileMenuOpen = false
+            mouse.accepted = false
+        }
+    }
+
+    Loader {
+        id: profileMenu
+        z: 55
+        active: root.profileMenuOpen && !root.inPlayer
+        sourceComponent: profileMenuComponent
+        anchors.top: topBar.bottom
+        anchors.topMargin: Theme.s2
+        x: root.width - width - Theme.s5
+    }
+
+    Component {
+        id: profileMenuComponent
+        ProfileMenu {
+            authenticated: authManager ? authManager.authenticated : false
+            displayName: root.accountDisplayName
+            detail: authManager && authManager.email ? authManager.email : ""
+            onSettingsRequested:   { root.profileMenuOpen = false; root.currentPage = "settings" }
+            onMyListRequested:     { root.profileMenuOpen = false; root.currentPage = "mylist" }
+            onSignInOutRequested: function(signingIn) {
+                root.profileMenuOpen = false
+                if (!authManager) return
+                if (signingIn) authManager.signInWithBrowserBridge()
+                else { authManager.signOut(); root.notify("Signed out") }
+            }
+        }
+    }
+
+    readonly property string accountDisplayName: {
+        if (!authManager || !authManager.authenticated) return "Guest"
+        var em = authManager.email || ""
+        if (em.indexOf("@") !== -1 && em.substring(0, em.indexOf("@")).length > 0)
+            return em.substring(0, em.indexOf("@"))
+        var uid = (authManager.userId || "").replace("user_", "")
+        return uid.length > 0 ? uid : "You"
+    }
+
     // ── Toast stack ─────────────────────────────────────────────────────
     Column {
         id: toastLayer
@@ -1515,6 +1565,8 @@ ApplicationWindow {
         onActivated: {
             if (root.notifPanelOpen) {
                 root.notifPanelOpen = false
+            } else if (root.profileMenuOpen) {
+                root.profileMenuOpen = false
             } else if (root.drawerOpen) {
                 root.drawerOpen = false
             } else if (root.currentPage !== "home") {
