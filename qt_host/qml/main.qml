@@ -310,8 +310,12 @@ ApplicationWindow {
         if (currentPage === "history" || currentPage === "home")
             root.refreshWatchHistory(false)
 
-        if (currentPage === "player")
+        if (currentPage === "player") {
+            // Section 21: the chrome must be up when the player opens, then
+            // retire after the pointer goes still.
+            hideTimer.restart()
             root.loadPlayerEpisodes()
+        }
         else
             root.episodePanelOpen = false
 
@@ -953,13 +957,14 @@ ApplicationWindow {
         acceptedButtons: Qt.NoButton
         visible: root.inPlayer
         z: 1
-        onPositionChanged: if (root.isFullscreen) hideTimer.restart()
+        onPositionChanged: hideTimer.restart()
     }
 
     // An open episode list is an explicit request, so it holds the chrome up
     // even after the pointer has been still long enough to hide it.
+    property bool pointerOnChrome: false
     readonly property bool chromeVisible: root.inPlayer
-            && (root.episodePanelOpen || !root.isFullscreen || hideTimer.running)
+            && (root.episodePanelOpen || root.pointerOnChrome || hideTimer.running)
 
     // Play flash
     Rectangle {
@@ -1103,6 +1108,14 @@ ApplicationWindow {
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: root.topH; z: 7; color: "transparent"
         visible: root.inPlayer
+        opacity: root.chromeVisible ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+
+        HoverHandler {
+            id: topBarHover
+            onHoveredChanged: root.pointerOnChrome = topBarHover.hovered || botBarHover.hovered
+        }
+
         gradient: Gradient {
             orientation: Gradient.Vertical
             GradientStop { position: 0.0; color: "#CC000000" }
@@ -1659,6 +1672,8 @@ ApplicationWindow {
             })
         })
     }
+
+    function hideTimerRestart() { hideTimer.restart() }
 
     function goSearch() {
         root.currentPage = "search"
