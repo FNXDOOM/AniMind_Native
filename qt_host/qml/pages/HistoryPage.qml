@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
@@ -20,10 +21,14 @@ Item {
     // ── Public signal ──────────────────────────────────────────────────────
     signal seriesSelected(int anilistId)
 
-    // ── Internal state ─────────────────────────────────────────────────────
-    property var    historyEntries: []
-    property bool   isLoading:      false
-    property string errorText:      ""
+    // ── Shared state ───────────────────────────────────────────────────────
+    // The shell owns the one copy of the watch history so Home's Continue
+    // Watching row and this page cannot disagree or double-fetch.
+    readonly property var app: Window.window
+
+    property var    historyEntries: app ? app.watchHistory      : []
+    property bool   isLoading:      app ? app.watchHistoryLoading : false
+    property string errorText:      app ? app.watchHistoryError   : ""
 
     // ── Design tokens ──────────────────────────────────────────────────────
     readonly property color clrBackground:  "#0a0a0a"
@@ -49,11 +54,10 @@ Item {
         onTriggered: loadHistory()
     }
 
-    // ── Trigger load when the page becomes visible and user is authenticated
+    // ── Ask the shell for a refresh when the page is opened
     onVisibleChanged: {
-        if (visible && authManager && authManager.authenticated) {
+        if (visible && app)
             activationDelay.restart()
-        }
     }
 
     // ── State helpers ──────────────────────────────────────────────────────
@@ -66,39 +70,8 @@ Item {
         return "results"
     }
 
-    // ── loadHistory() ─────────────────────────────────────────────────────
-    // Issues a GET request to Supabase watch_history for the signed-in user.
-    // Uses supabaseUrl and supabaseKey context properties set in main.cpp.
-    // Requirements: 3.2, 3.4, 3.5, 3.6
     function loadHistory() {
-        if (!authManager || !authManager.authenticated) return
-        isLoading = true
-        errorText = ""
-        var xhr = new XMLHttpRequest()
-        var url = supabaseUrl + "/rest/v1/watch_history"
-                  + "?user_id=eq." + encodeURIComponent(authManager.userId)
-                  + "&order=last_watched.desc&limit=50"
-        xhr.open("GET", url, true)
-        xhr.setRequestHeader("apikey", supabaseKey)
-        xhr.setRequestHeader("Authorization", "Bearer " + supabaseKey)
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState !== XMLHttpRequest.DONE) return
-            isLoading = false
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    historyEntries = JSON.parse(xhr.responseText)
-                } catch(e) {
-                    errorText = "Failed to parse history data."
-                }
-            } else {
-                errorText = "Failed to load history (HTTP " + xhr.status + ")"
-            }
-        }
-        xhr.onerror = function() {
-            isLoading = false
-            errorText = "Network error"
-        }
-        xhr.send()
+        if (app) app.refreshWatchHistory(true)
     }
 
     // ── relativeTime(isoString) ────────────────────────────────────────────

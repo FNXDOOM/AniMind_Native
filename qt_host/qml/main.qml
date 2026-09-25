@@ -97,6 +97,13 @@ ApplicationWindow {
     property bool   railCollapsed: false
     property bool   episodePanelOpen: false
     property var    playerEpisodes: []
+    // One copy of the watch history for the whole app: the Continue Watching
+    // row on Home and the HistoryPage both read this, instead of each issuing
+    // their own GET against the same endpoint.
+    property var    watchHistory: []
+    property bool   watchHistoryLoading: false
+    property string watchHistoryError: ""
+    property bool   watchHistoryLoaded: false
     property int    playerEpisodesFor: -1
     property string previousPage: "home"
     property var currentSeriesId: 0
@@ -296,6 +303,9 @@ ApplicationWindow {
         // handler because a second onCurrentPageChanged on the same object is a
         // fatal duplicate. Explicit animation, not a Behavior: two assignments
         // in one turn leave a Behavior with no net change to play.
+        if (currentPage === "history" || currentPage === "home")
+            root.refreshWatchHistory(false)
+
         if (currentPage === "player")
             root.loadPlayerEpisodes()
         else
@@ -633,6 +643,11 @@ ApplicationWindow {
                     root.previousPage = root.currentPage
                     root.currentPage = "detail"
                 })
+                if (item.continueWatchingRequested)
+                    item.continueWatchingRequested.connect(function() {
+                        root.previousPage = root.currentPage
+                        root.currentPage = "history"
+                    })
                 if (item.trendingSeeAllRequested) {
                     item.trendingSeeAllRequested.connect(function() {
                         root.previousPage = root.currentPage
@@ -1486,6 +1501,44 @@ ApplicationWindow {
 
     // Reuses the existing detail query; the sidebar shows whatever
     // streamingEpisodes the API lists for this id. Nothing here touches mpv.
+    function refreshWatchHistory(force) {
+        if (watchHistoryLoading) return
+        if (watchHistoryLoaded && !force) return
+        if (!authManager || !authManager.authenticated) {
+            watchHistory = []
+            watchHistoryError = ""
+            return
+        }
+        watchHistoryLoading = true
+        watchHistoryError = ""
+        var xhr = new XMLHttpRequest()
+        var url = supabaseUrl + "/rest/v1/watch_history"
+                  + "?user_id=eq." + encodeURIComponent(authManager.userId)
+                  + "&order=last_watched.desc&limit=50"
+        xhr.open("GET", url, true)
+        xhr.setRequestHeader("apikey", supabaseKey)
+        xhr.setRequestHeader("Authorization", "Bearer " + supabaseKey)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            watchHistoryLoading = false
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    watchHistory = JSON.parse(xhr.responseText)
+                    watchHistoryLoaded = true
+                } catch (e) {
+                    watchHistoryError = "We couldn't read your watch history."
+                }
+            } else {
+                watchHistoryError = "We couldn't load your watch history (HTTP " + xhr.status + ")."
+            }
+        }
+        xhr.onerror = function() {
+            watchHistoryLoading = false
+            watchHistoryError = "We couldn't reach the network. Check your connection."
+        }
+        xhr.send()
+    }
+
     function loadPlayerEpisodes() {
         var id = root.currentSeriesId
         if (!id || id <= 0) { root.playerEpisodes = []; root.playerEpisodesFor = -1; return }

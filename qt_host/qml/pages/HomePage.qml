@@ -1,7 +1,9 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
+import "../components"
 
 // HomePage — the screening room.
 // Colour and type values mirror the tokens declared in main.qml; they are
@@ -21,6 +23,11 @@ Rectangle {
     signal addToListRequested(int id)
     signal seriesClicked(int id)
     signal trendingSeeAllRequested()
+    signal continueWatchingRequested()
+
+    // The shell owns the single copy of watch history.
+    readonly property var app: Window.window
+    readonly property var continueList: app ? app.watchHistory : []
 
     readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"
     readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
@@ -659,6 +666,48 @@ Rectangle {
                 rowModel:    homePage.trendingList
                 epTextMode:  "auto"
                 onSeeAllClicked: homePage.trendingSeeAllRequested()
+            }
+
+            // ── Continue Watching (section 5 and 15) ─────────────────────
+            Item { width: 1; height: 28; visible: cwList.visible }
+
+            SectionHeader {
+                id: cwHead
+                // Column only manages y, so the gutter goes on x directly to
+                // line this header up with the rows either side of it.
+                x: homePage.gutter
+                width: homePage.width - homePage.gutter * 2
+                visible: homePage.continueList.length > 0
+                title: "Continue Watching"
+                actionLabel: "See all"
+                onActionRequested: homePage.continueWatchingRequested()
+            }
+
+            Item { width: 1; height: Theme.s3; visible: cwList.visible }
+
+            ListView {
+                id: cwList
+                x: homePage.gutter
+                width: homePage.width - homePage.gutter * 2
+                height: 260 * 9 / 16 + Theme.s3 + 56
+                visible: homePage.continueList.length > 0
+                orientation: ListView.Horizontal
+                spacing: Theme.s4
+                model: homePage.continueList
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                delegate: ContinueCard {
+                    required property var modelData
+                    required property int index
+                    width: 260
+                    height: cwList.height
+                    entry: modelData
+                    onClicked: {
+                        if (modelData && modelData.anilist_id)
+                            homePage.seriesClicked(modelData.anilist_id)
+                    }
+                }
             }
 
             Item { width: 1; height: 20 }
