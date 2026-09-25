@@ -149,6 +149,9 @@ Rectangle {
 
         signal seeAllClicked()
 
+        // Driven by the row's own HoverHandler; gates the arrow reveal.
+        property bool hovered: false
+
         width: parent ? parent.width : 0
         spacing: 0
         visible: rowModel.length > 0
@@ -158,6 +161,19 @@ Rectangle {
             id: rowHeader
             width: parent.width
             height: 44
+
+            // Scoped to the header rather than the whole row: a HoverHandler
+            // over the ListView would compete with each card's own hover and
+            // flatten the card lift effect.
+            //
+            // `onHoveredChanged`, not `onChanged`: writing the latter as
+            // `onChanged: function (event) { ... }` aborts creation of the
+            // entire page under Qt 6.5.3, and the shell just shows an empty
+            // content area with no fatal-looking error.
+            HoverHandler {
+                id: rowHeaderHover
+                onHoveredChanged: rowRoot.hovered = rowHeaderHover.hovered
+            }
 
             Text {
                 id: rowTitleTxt
@@ -195,8 +211,19 @@ Rectangle {
                 }
 
                 Row {
+                    id: arrowGroup
                     spacing: 6
                     anchors.verticalCenter: parent.verticalCenter
+                    // Section 14: the arrows are an affordance for someone who
+                    // has looked at the row, not permanent chrome. Only the
+                    // arrows fade -- "View all" is a destination and stays put.
+                    // Row positions invisible children, so the slot is reserved
+                    // and nothing reflows when they appear.
+                    opacity: rowRoot.hovered ? 1.0 : 0.0
+                    visible: opacity > 0.01
+                    Behavior on opacity {
+                        NumberAnimation { duration: Theme.dFast; easing.type: Theme.easeOutCubic }
+                    }
 
                     Repeater {
                         model: ["left", "right"]
@@ -245,6 +272,12 @@ Rectangle {
 
             ListView {
                 id: rowListView
+                // Section 14: scrolling must be smooth. Without this the arrow
+                // buttons teleport a whole page.
+                Behavior on contentX {
+                    enabled: !homePage.calm
+                    NumberAnimation { duration: Theme.dSlow; easing.type: Theme.easeOutCubic }
+                }
                 anchors { left: parent.left; right: parent.right; leftMargin: homePage.gutter; rightMargin: homePage.gutter }
                 height: parent.height
                 model: rowRoot.rowModel
