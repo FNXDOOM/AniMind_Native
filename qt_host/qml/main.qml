@@ -764,8 +764,8 @@ ApplicationWindow {
             onLoaded: {
                 if (!item)
                     return
-                item.showId = root.currentCloudShowId
-                item.showTitle = root.currentCloudShowTitle
+                item.showId = Qt.binding(function() { return root.currentCloudShowId })
+                item.showTitle = Qt.binding(function() { return root.currentCloudShowTitle })
                 if (item.backRequested) {
                     item.backRequested.connect(function() {
                         root.currentPage = "simulcast"
@@ -784,9 +784,16 @@ ApplicationWindow {
             active: root.currentPage === "detail"
             source: active ? "pages/DetailPage.qml" : ""
             onLoaded: {
-                if (!item || !item.backRequested || !item.playRequested || !item.addToListRequested)
+                if (!item)
                     return
-                item.seriesId = root.currentSeriesId
+                // A live binding, not a one-shot copy. Copying here meant a
+                // page created before currentSeriesId was set stayed on its
+                // loading pane forever, and moving from one detail screen to
+                // another never reloaded at all because the Loader was already
+                // active and onLoaded does not fire again.
+                item.seriesId = Qt.binding(function() { return root.currentSeriesId })
+                if (!item.backRequested || !item.playRequested || !item.addToListRequested)
+                    return
                 item.backRequested.connect(function() {
                     root.currentPage = root.previousPage || "home"
                 })
