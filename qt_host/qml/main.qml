@@ -55,7 +55,9 @@ ApplicationWindow {
     readonly property int  bpTablet:  1024
     readonly property bool isMobile:  width < bpMobile
     readonly property bool isCompact: width < bpTablet
-    readonly property int  navW:      isCompact ? 0 : 208
+    readonly property int  navW:      isCompact ? 0
+                                    : (railCollapsed ? Theme.railCollapsedW
+                                                           : Theme.railExpandedW)
     readonly property int  headerH:   isMobile ? 56 : 64
     readonly property int  tabH:      isCompact ? 64 : 0
     readonly property int  gutter:    isMobile ? 16 : (isCompact ? 24 : 32)
@@ -89,6 +91,9 @@ ApplicationWindow {
     // ── Navigation state ──────────────────────────────────────────────────
     // Pages: "home" | "browse" | "simulcast" | "simulcastDetail" | "mylist" | "history" | "settings" | "player"
     property string currentPage: "home"
+    // Owned here, not by the rail, so navW and the content column follow
+    // the same animated value.
+    property bool   railCollapsed: false
     property string previousPage: "home"
     property var currentSeriesId: 0
     property string currentCloudShowId: ""
@@ -396,10 +401,16 @@ ApplicationWindow {
         visible: width > 0 && !root.inPlayer
         clip: true
 
+        Behavior on width {
+            NumberAnimation { duration: Theme.dBase; easing.type: Theme.easeOutCubic }
+        }
+
         SideNav {
             anchors { top: parent.top; left: parent.left; bottom: parent.bottom }
             currentPage: root.currentPage
+            collapsed: root.railCollapsed
             onNavigate: (page) => root.currentPage = page
+            onToggleRequested: root.railCollapsed = !root.railCollapsed
         }
     }
 

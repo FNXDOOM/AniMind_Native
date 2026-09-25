@@ -12,6 +12,9 @@ QtObject {
     readonly property color surfaceRaised:  "#151B23"
     readonly property color sidebar:       "#080B0F"
     readonly property color input:         "#11161D"
+    // Sits between card and surfaceRaised so a hovered row reads as one
+    // step up, never as a jump.
+    readonly property color hoverBg:       "#0F141A"
 
     // ── Borders ───────────────────────────────────────────────────────────
     // Three steps only, so a hairline never has to be invented per screen.
