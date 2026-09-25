@@ -57,7 +57,20 @@ Rectangle {
         return out
     }
 
+    property bool filtersOpen: false
+    property int    fSort: 1        // index into AniListApi sortMap; 1 = popularity
     readonly property bool hasFilters: fFormat !== "" || fStatus !== "" || fYear !== 0 || fGenre !== ""
+
+    // The dialog takes {v,label} rows; genre is stored as a bare string list.
+    readonly property var dlgGenreOpts: [{ v: "", label: "Any" }]
+                                        .concat(searchPage.genreOpts.map(g => ({ v: g, label: g })))
+    readonly property var dlgSortOpts:  [ { v: 1, label: "Popularity" },
+                                          { v: 3, label: "Rating" },
+                                          { v: 2, label: "Latest" },
+                                          { v: 4, label: "A - Z" } ]
+    readonly property var dlgYearOpts:  [{ v: 0, label: "Any year" }]
+                                        .concat(searchPage.yearOpts.filter(y => y !== 0)
+                                                          .map(y => ({ v: y, label: String(y) })))
     readonly property bool idle: query.length < 2 && !hasFilters
 
     function resetFilters() {
@@ -71,7 +84,7 @@ Rectangle {
         var pending = 2
         function finish() { pending -= 1; if (pending <= 0) searchPage.loading = false }
 
-        var opts = { page: 1, perPage: 50, sort: 1 }
+        var opts = { page: 1, perPage: 50, sort: searchPage.fSort }
         if (query.length >= 2)  opts.search = query
         if (fGenre !== "")      opts.genre = fGenre
         if (fFormat !== "")     opts.format = fFormat
@@ -205,11 +218,37 @@ Rectangle {
             spacing: 16
             width: parent.width - 32
 
-            Text {
-                text: "Filters"
-                color: "#ffffff"
-                font.family: searchPage.displayFont
-                font.pixelSize: 15; font.weight: Font.DemiBold
+            Row {
+                width: parent.width
+                spacing: Theme.s2
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Filters"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 15; font.weight: Font.DemiBold
+                }
+                Item {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: moreTxt.implicitWidth + 4
+                    height: 20
+                    Text {
+                        id: moreTxt
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "More"
+                        color: moreHover.hovered ? Theme.textPrimary : Theme.textMuted
+                        font.family: Theme.bodyFont
+                        font.pixelSize: Theme.tsSmall
+                        font.weight: Font.Medium
+                        Behavior on color { ColorAnimation { duration: Theme.dFast } }
+                    }
+                    HoverHandler { id: moreHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: searchPage.filtersOpen = true }
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "More filters"
+                    Accessible.onPressAction: searchPage.filtersOpen = true
+                }
             }
 
             Repeater {
@@ -688,6 +727,35 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: searchPage.resetFilters()
             }
+        }
+    }
+
+    // ── Filter & Sort modal ─────────────────────────────────────────────
+    FilterDialog {
+        id: filterDialog
+        z: 20
+        open: searchPage.filtersOpen
+        genreOpts:  searchPage.dlgGenreOpts
+        statusOpts: searchPage.statusOpts
+        typeOpts:   searchPage.typeOpts
+        sortOpts:   searchPage.dlgSortOpts
+        yearOpts:   searchPage.dlgYearOpts
+
+        genre:  searchPage.fGenre
+        status: searchPage.fStatus
+        type:   searchPage.fFormat
+        sort:   searchPage.fSort
+        year:   searchPage.fYear
+
+        onDismissed: searchPage.filtersOpen = false
+        onApplied: (draft) => {
+            searchPage.fGenre  = draft.genre  || ""
+            searchPage.fStatus = draft.status || ""
+            searchPage.fFormat = draft.format || ""
+            searchPage.fYear   = draft.year   || 0
+            searchPage.fSort   = draft.sort   || 0
+            searchPage.filtersOpen = false
+            searchPage.run()
         }
     }
 }
