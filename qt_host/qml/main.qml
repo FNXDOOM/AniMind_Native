@@ -1474,8 +1474,78 @@ ApplicationWindow {
     // The old SearchOverlay modal is no longer used.
     // ─────────────────────────────────────────────────────────────────────
 
-    // ─────────────────────────────────────────────────────────────────────
-    // NON-PLAYER ESCAPE KEY HANDLER
+    // ── Splash ──────────────────────────────────────────────────────────
+    // Shown once while the first requests are in flight, then it lifts away.
+    Rectangle {
+        id: splash
+        anchors.fill: parent
+        z: 90
+        color: Theme.bg
+        visible: opacity > 0.001
+        opacity: 1.0
+
+        Column {
+            anchors.centerIn: parent
+            spacing: Theme.s5
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 76; height: 76; radius: Theme.rXl
+                color: Theme.card
+                border.color: Theme.borderDefault; border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\uE768"
+                    color: Theme.accent
+                    font.family: Theme.iconFont
+                    font.pixelSize: 30
+                }
+            }
+
+            Column {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.s2
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Animind"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 34
+                    font.weight: Font.Bold
+                    font.letterSpacing: -0.4
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "Your anime, anytime"
+                    color: Theme.textSecondary
+                    font.family: Theme.bodyFont
+                    font.pixelSize: Theme.tsBody
+                }
+            }
+        }
+
+        Text {
+            anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: Theme.s10 }
+            text: "Built with Qt / QML"
+            color: Theme.textMuted
+            font.family: Theme.bodyFont
+            font.pixelSize: Theme.tsSmall
+            font.letterSpacing: Theme.trackingWide
+        }
+
+        // A short hold, then a fade. Long enough to register, short enough that
+        // nobody watches it.
+        SequentialAnimation {
+            id: splashOut
+            running: false
+            PauseAnimation { duration: 900 }
+            NumberAnimation { target: splash; property: "opacity"; to: 0.0
+                              duration: Theme.dSlow; easing.type: Theme.easeOutCubic }
+        }
+    }
+
     // ── Profile menu ────────────────────────────────────────────────────
     MouseArea {
         anchors.fill: parent
@@ -1685,6 +1755,10 @@ ApplicationWindow {
     Component.onCompleted: {
         video.command(["set","volume","50"])
         focusSink.forceActiveFocus()
+        if (root.reduceMotion)
+            splash.opacity = 0.0
+        else
+            splashOut.start()
     }
 
     Connections {
