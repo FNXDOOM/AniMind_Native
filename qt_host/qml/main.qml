@@ -5,7 +5,8 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import QtQuick.Effects
 import Animind.Player 1.0
-import "."   // picks up qmldir → AniListApi singleton
+import "."          // picks up qmldir → AniListApi singleton
+import "components"
 
 ApplicationWindow {
     id: root
@@ -94,6 +95,9 @@ ApplicationWindow {
     // Owned here, not by the rail, so navW and the content column follow
     // the same animated value.
     property bool   railCollapsed: false
+    property bool   episodePanelOpen: false
+    property var    playerEpisodes: []
+    property int    playerEpisodesFor: -1
     property string previousPage: "home"
     property var currentSeriesId: 0
     property string currentCloudShowId: ""
@@ -292,6 +296,11 @@ ApplicationWindow {
         // handler because a second onCurrentPageChanged on the same object is a
         // fatal duplicate. Explicit animation, not a Behavior: two assignments
         // in one turn leave a Behavior with no net change to play.
+        if (currentPage === "player")
+            root.loadPlayerEpisodes()
+        else
+            root.episodePanelOpen = false
+
         if (!root.reduceMotion && currentPage !== "player")
             pageIn.restart()
 
@@ -889,6 +898,9 @@ ApplicationWindow {
                 video.command(["cycle","mute"]); ev.accepted = true
             } else if (ev.key === Qt.Key_O) {
                 fileDialog.open(); ev.accepted = true
+            } else if (ev.key === Qt.Key_Escape && root.episodePanelOpen) {
+                root.episodePanelOpen = false
+                ev.accepted = true
             } else if (ev.key === Qt.Key_Escape) {
                 if (root.visibility === Window.FullScreen) root.showNormal()
                 else root.stopPlaybackAndExit("home")
@@ -906,7 +918,10 @@ ApplicationWindow {
         onPositionChanged: if (root.isFullscreen) hideTimer.restart()
     }
 
-    readonly property bool chromeVisible: root.inPlayer && (!root.isFullscreen || hideTimer.running)
+    // An open episode list is an explicit request, so it holds the chrome up
+    // even after the pointer has been still long enough to hide it.
+    readonly property bool chromeVisible: root.inPlayer
+            && (root.episodePanelOpen || !root.isFullscreen || hideTimer.running)
 
     // Play flash
     Rectangle {
@@ -1363,7 +1378,8 @@ ApplicationWindow {
                         Text { text: "\uE8FD"; font.family: root.iconFont; color: "white"; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         Text { text: "Episodes"; color: "white"; font.pixelSize: 13; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
                     }
-                    MouseArea { id: epMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: fileDialog.open() }
+                    MouseArea { id: epMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: root.episodePanelOpen = !root.episodePanelOpen }
                 }
 
                 Rectangle {
@@ -1409,6 +1425,29 @@ ApplicationWindow {
 
     // ─────────────────────────────────────────────────────────────────────
     // NON-PLAYER ESCAPE KEY HANDLER
+    // ── Episode sidebar (watch page) ────────────────────────────────────
+    EpisodeSidebar {
+        id: episodeSidebar
+        anchors.fill: parent
+        visible: root.inPlayer
+        open: root.inPlayer && root.episodePanelOpen
+        calm: root.reduceMotion
+        episodes: root.playerEpisodes
+        seriesTitle: root.showTitle
+        currentIndex: {
+            for (var i = 0; i < root.playerEpisodes.length; i++) {
+                var e = root.playerEpisodes[i]
+                if (e && e.url && e.url === root.mediaUrl) return i
+            }
+            return -1
+        }
+        onDismissed: root.episodePanelOpen = false
+        onEpisodePicked: (url, title, label, thumb) => {
+            root.playStreamNow(url, title, label, thumb)
+            root.episodePanelOpen = false
+        }
+    }
+
     // Closes the NotificationPanel (or SearchOverlay) when Escape is pressed
     // outside of the player. The player's own Escape handling lives in focusSink
     // (which is only active/focused when inPlayer is true).
@@ -1443,6 +1482,21 @@ ApplicationWindow {
         sequence: "Ctrl+B"
         enabled: !root.inPlayer && !root.isCompact
         onActivated: root.railCollapsed = !root.railCollapsed
+    }
+
+    // Reuses the existing detail query; the sidebar shows whatever
+    // streamingEpisodes the API lists for this id. Nothing here touches mpv.
+    function loadPlayerEpisodes() {
+        var id = root.currentSeriesId
+        if (!id || id <= 0) { root.playerEpisodes = []; root.playerEpisodesFor = -1; return }
+        if (root.playerEpisodesFor === id) return
+        root.playerEpisodesFor = id
+        AniListApi.animeDetail(id, function(media, err) {
+            if (err || !media) { root.playerEpisodes = []; return }
+            root.playerEpisodes = (media.streamingEpisodes || []).filter(function(e) {
+                return e && e.title
+            })
+        })
     }
 
     function goSearch() {
