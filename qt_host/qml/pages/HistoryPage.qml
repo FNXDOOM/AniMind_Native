@@ -21,6 +21,7 @@ Item {
 
     // ── Public signal ──────────────────────────────────────────────────────
     signal seriesSelected(int anilistId)
+    signal browseRequested()
 
     // ── Shared state ───────────────────────────────────────────────────────
     // The shell owns the one copy of the watch history so Home's Continue
@@ -103,143 +104,68 @@ Item {
     // ══════════════════════════════════════════════════════════════════════
     // LOADING STATE — centered spinner
     // ══════════════════════════════════════════════════════════════════════
-    BusyIndicator {
-        id: loadingIndicator
-        anchors.centerIn: parent
-        width: 56
-        height: 56
+    // ══════════════════════════════════════════════════════════════════════
+    // LOADING — row-shaped skeletons, not a spinner in the dark
+    // ══════════════════════════════════════════════════════════════════════
+    Column {
+        id: loadingState
+        anchors { top: parent.top; topMargin: Theme.s6; left: parent.left; right: parent.right }
+        anchors.leftMargin: Theme.s6; anchors.rightMargin: Theme.s6
         visible: root.pageState === "loading"
-        running: visible
+        spacing: Theme.s3
+
+        Repeater {
+            model: 6
+            Skeleton {
+                width: loadingState.width
+                height: 80
+                bars: 1
+                barHeight: 80
+            }
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // ERROR STATE — error message + Retry button
+    // ERROR — names what failed and offers the way out
     // ══════════════════════════════════════════════════════════════════════
-    Column {
+    EmptyState {
         id: errorState
         anchors.centerIn: parent
-        spacing: 16
         visible: root.pageState === "error"
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: root.errorText
-            color: root.clrError
-            font.family: Theme.bodyFont
-            font.pixelSize: 14
-            wrapMode: Text.Wrap
-            horizontalAlignment: Text.AlignHCenter
-            width: Math.min(400, root.width - 48)
-        }
-
-        Rectangle {
-            id: retryButton
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: 40
-            width: retryLabel.implicitWidth + 32
-            radius: 8
-            color: retryMa.pressed
-                   ? Qt.darker(root.clrAccent, 1.2)
-                   : (retryMa.containsMouse ? Qt.darker(root.clrAccent, 1.08) : root.clrAccent)
-
-            Text {
-                id: retryLabel
-                anchors.centerIn: parent
-                text: "Retry"
-                color: "white"
-                font.family: Theme.bodyFont
-                font.pixelSize: 14
-                font.bold: true
-            }
-
-            MouseArea {
-                id: retryMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.loadHistory()
-            }
-        }
+        isError: true
+        glyph: "\uE783"
+        title: root.errorText
+        body: "Your watch history stays on the server, so a retry usually brings it back."
+        actionLabel: "Retry"
+        onActionRequested: root.loadHistory()
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // EMPTY STATE — "No watch history yet"
+    // EMPTY — an invitation, with somewhere to go
     // ══════════════════════════════════════════════════════════════════════
-    Column {
+    EmptyState {
         id: emptyState
         anchors.centerIn: parent
-        spacing: 8
         visible: root.pageState === "empty"
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "No watch history yet"
-            color: root.clrOnSurface
-            font.family: Theme.displayFont
-            font.pixelSize: 20
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "Watch something to start building your history."
-            color: root.clrMuted
-            font.family: Theme.bodyFont
-            font.pixelSize: 13
-            horizontalAlignment: Text.AlignHCenter
-        }
+        glyph: "\uE823"
+        title: "Nothing watched yet"
+        body: "Play an episode and it will show up here so you can pick up where you stopped."
+        actionLabel: "Browse anime"
+        onActionRequested: root.browseRequested()
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // UNAUTHENTICATED STATE — sign-in prompt
+    // UNAUTHENTICATED
     // ══════════════════════════════════════════════════════════════════════
-    Column {
+    EmptyState {
         id: unauthState
         anchors.centerIn: parent
-        spacing: 20
         visible: root.pageState === "unauthenticated"
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "Sign in to see your watch history"
-            color: root.clrOnSurface
-            font.family: Theme.displayFont
-            font.pixelSize: 20
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        Rectangle {
-            id: signInButton
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: 44
-            width: signInLabel.implicitWidth + 40
-            radius: 10
-            color: signInMa.pressed
-                   ? Qt.darker(root.clrAccent, 1.2)
-                   : (signInMa.containsMouse ? Qt.darker(root.clrAccent, 1.08) : root.clrAccent)
-
-            Text {
-                id: signInLabel
-                anchors.centerIn: parent
-                text: "Sign In"
-                color: "white"
-                font.family: Theme.bodyFont
-                font.pixelSize: 15
-                font.bold: true
-            }
-
-            MouseArea {
-                id: signInMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (authManager) authManager.signInWithBrowserBridge()
-                }
-            }
-        }
+        glyph: "\uE77B"
+        title: "Sign in to see your watch history"
+        body: "History follows your account, so you can pick up on any device you sign in on."
+        actionLabel: authManager && authManager.signingIn ? "Signing in" : "Sign in"
+        onActionRequested: { if (authManager) authManager.signInWithBrowserBridge() }
     }
 
     // ══════════════════════════════════════════════════════════════════════
