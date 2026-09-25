@@ -1392,8 +1392,34 @@ ApplicationWindow {
         onActivated: {
             if (root.notifPanelOpen) {
                 root.notifPanelOpen = false
+            } else if (root.drawerOpen) {
+                root.drawerOpen = false
+            } else if (root.currentPage !== "home") {
+                root.currentPage = root.previousPage || "home"
             }
         }
+    }
+
+    // Search is the one action worth a chord on a desktop app.
+    Shortcut {
+        sequence: "Ctrl+K"
+        enabled: !root.inPlayer
+        onActivated: root.goSearch()
+    }
+    Shortcut {
+        sequence: "Ctrl+F"
+        enabled: !root.inPlayer
+        onActivated: root.goSearch()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+B"
+        enabled: !root.inPlayer && !root.isCompact
+        onActivated: root.railCollapsed = !root.railCollapsed
+    }
+
+    function goSearch() {
+        root.currentPage = "search"
     }
 
     // ─────────────────────────────────────────────────────────────────────
