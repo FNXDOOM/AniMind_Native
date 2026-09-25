@@ -346,19 +346,53 @@ Rectangle {
                 width: parent.width
                 height: 520
 
-                Rectangle { anchors.fill: parent; color: "#0b0c14" }
+                Rectangle { anchors.fill: parent; color: Theme.bgSecondary }
 
-                Image {
-                    id: heroArt
+                Item {
+                    id: heroArtHolder
                     anchors.fill: parent
-                    source: heroMedia ? (heroMedia.bannerImage && heroMedia.bannerImage !== ""
-                                         ? heroMedia.bannerImage : AniListApi.cover(heroMedia)) : ""
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    // Fade the art in on load; `visible` is left alone so the
-                    // opacity transition can actually play.
-                    opacity: status === Image.Ready ? 1.0 : 0.0
-                    Behavior on opacity { NumberAnimation { duration: homePage.calm ? 0 : 520; easing.type: Easing.OutCubic } }
+                    clip: true
+
+                    Image {
+                        id: heroArt
+                        anchors.fill: parent
+                        source: heroMedia ? (heroMedia.bannerImage && heroMedia.bannerImage !== ""
+                                             ? heroMedia.bannerImage : AniListApi.cover(heroMedia)) : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        // Fade the art in on load; `visible` is left alone so the
+                        // opacity transition can actually play.
+                        opacity: status === Image.Ready ? 1.0 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: homePage.calm ? 0 : 520; easing.type: Easing.OutCubic } }
+
+                        transform: Scale {
+                            id: artScale
+                            xScale: 1.0
+                            yScale: 1.0
+                            origin.x: heroArt.width * 0.35
+                            origin.y: heroArt.height * 0.5
+                        }
+                    }
+
+                    // Slow Ken Burns drift. Long and shallow on purpose: it should
+                    // be felt rather than watched, and it stops for reduced motion.
+                    SequentialAnimation {
+                        id: ambientZoom
+                        running: homePage.visible && !homePage.calm && heroArt.status === Image.Ready
+                        loops: Animation.Infinite
+                        NumberAnimation { target: artScale; property: "xScale"
+                                          from: 1.0; to: 1.055; duration: Theme.dAmbient; easing.type: Easing.InOutSine }
+                        NumberAnimation { target: artScale; property: "xScale"
+                                          from: 1.055; to: 1.0; duration: Theme.dAmbient; easing.type: Easing.InOutSine }
+                    }
+                    ParallelAnimation {
+                        running: ambientZoom.running
+                        loops: Animation.Infinite
+                        NumberAnimation { target: artScale; property: "yScale"
+                                          from: 1.0; to: 1.04; duration: Theme.dAmbient * 1.4; easing.type: Easing.InOutSine }
+                        NumberAnimation { target: artScale; property: "yScale"
+                                          from: 1.04; to: 1.0; duration: Theme.dAmbient * 1.4; easing.type: Easing.InOutSine }
+                    }
                 }
 
                 // Left scrim: stops short of the art's centre so it stays readable
@@ -366,10 +400,10 @@ Rectangle {
                     anchors.fill: parent
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
-                        GradientStop { position: 0.00; color: Qt.rgba(0.027, 0.027, 0.051, 0.97) }
-                        GradientStop { position: 0.34; color: Qt.rgba(0.027, 0.027, 0.051, 0.74) }
-                        GradientStop { position: 0.66; color: Qt.rgba(0.027, 0.027, 0.051, 0.10) }
-                        GradientStop { position: 1.00; color: Qt.rgba(0.027, 0.027, 0.051, 0.00) }
+                        GradientStop { position: 0.00; color: Qt.rgba(0.027, 0.035, 0.047, 0.97) }
+                        GradientStop { position: 0.34; color: Qt.rgba(0.027, 0.035, 0.047, 0.74) }
+                        GradientStop { position: 0.66; color: Qt.rgba(0.027, 0.035, 0.047, 0.10) }
+                        GradientStop { position: 1.00; color: Qt.rgba(0.027, 0.035, 0.047, 0.00) }
                     }
                 }
 
@@ -379,8 +413,8 @@ Rectangle {
                     gradient: Gradient {
                         orientation: Gradient.Vertical
                         GradientStop { position: 0.58; color: "transparent" }
-                        GradientStop { position: 0.86; color: Qt.rgba(0.027, 0.027, 0.051, 0.82) }
-                        GradientStop { position: 1.00; color: "#0a0a0a" }
+                        GradientStop { position: 0.86; color: Qt.rgba(0.027, 0.035, 0.047, 0.82) }
+                        GradientStop { position: 1.00; color: Theme.bg }
                     }
                 }
 
@@ -442,12 +476,12 @@ Rectangle {
                         width: parent.width
                         text: heroMedia ? AniListApi.title(heroMedia) : ""
                         color: "#ffffff"
-                        font.family: homePage.displayFont
-                        font.pixelSize: 52
+                        font.family: Theme.displayFont
+                        font.pixelSize: homePage.heroSize
                         font.weight: Font.Bold
                         font.letterSpacing: -0.6
                         lineHeightMode: Text.FixedHeight
-                        lineHeight: 54
+                        lineHeight: Math.round(homePage.heroSize * 1.08)
                         wrapMode: Text.WordWrap
                         maximumLineCount: 2
                         elide: Text.ElideRight
@@ -465,7 +499,8 @@ Rectangle {
                             var d = homePage.heroMedia
                             if (!d) return ""
                             var bits = []
-                            bits.push("S1")
+                            if (d.season)
+                                bits.push(d.season.charAt(0) + d.season.slice(1).toLowerCase())
                             if (d.genres) bits = bits.concat(d.genres.slice(0, 2))
                             if (d.episodes) bits.push(d.episodes + " Episodes")
                             else if (d.nextAiringEpisode) bits.push("Ongoing")
@@ -504,8 +539,8 @@ Rectangle {
                         visible: homePage.heroMedia ? homePage.tally(homePage.heroMedia) !== "" : false
                         height: 34; radius: 4
                         width: tallyRow.implicitWidth + 22
-                        color: Qt.rgba(0.016, 0.016, 0.039, 0.72)
-                        border.color: Qt.rgba(0.95, 0.46, 0.13, 0.34); border.width: 1
+                        color: Theme.veilLight
+                        border.color: Theme.borderStrong; border.width: 1
 
                         Row {
                             id: tallyRow
