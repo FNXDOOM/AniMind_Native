@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../"
@@ -15,6 +16,8 @@ import "../"
 
 Item {
     id: myListPage
+
+    readonly property var appShell: Window.window
 
     // ── Public API ────────────────────────────────────────────────────────
     signal seriesSelected(int showId)
@@ -447,12 +450,16 @@ Item {
                             onStatusChanged: function(newStatus) {
                                 if (authManager) {
                                     authManager.updateShowStatus(String(modelData.anilist_id || modelData.id || 0), newStatus)
+                                    if (myListPage.appShell)
+                                        myListPage.appShell.notify("Marked as " + newStatus, "success")
                                 }
                             }
                             
                             onRemoveClicked: {
                                 if (authManager) {
                                     authManager.removeShow(String(modelData.anilist_id || modelData.id || 0))
+                                    if (myListPage.appShell)
+                                        myListPage.appShell.notify("Removed from My List", "success")
                                 }
                             }
                         }

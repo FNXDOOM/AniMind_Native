@@ -104,6 +104,8 @@ ApplicationWindow {
     property bool   watchHistoryLoading: false
     property string watchHistoryError: ""
     property bool   watchHistoryLoaded: false
+    property var    toasts: []
+    property int    toastSeq: 0
     property int    playerEpisodesFor: -1
     property string previousPage: "home"
     property var currentSeriesId: 0
@@ -636,7 +638,12 @@ ApplicationWindow {
                     fileDialog.open()   // TODO: resolve stream URL for anilistId
                 })
                 item.addToListRequested.connect(function(anilistId) {
-                    console.log("Add to list:", anilistId)
+                    if (!authManager || !authManager.authenticated) {
+                        root.notify("Sign in to keep a list.", "error")
+                        return
+                    }
+                    authManager.addToLibrary({ "anilist_id": anilistId })
+                    root.notify("Added to My List", "success")
                 })
                 item.seriesClicked.connect(function(anilistId) {
                     root.currentSeriesId = anilistId
@@ -669,7 +676,12 @@ ApplicationWindow {
                     fileDialog.open()
                 })
                 item.addToListRequested.connect(function(anilistId) {
-                    console.log("Add to list:", anilistId)
+                    if (!authManager || !authManager.authenticated) {
+                        root.notify("Sign in to keep a list.", "error")
+                        return
+                    }
+                    authManager.addToLibrary({ "anilist_id": anilistId })
+                    root.notify("Added to My List", "success")
                 })
                 item.seriesClicked.connect(function(anilistId) {
                     root.currentSeriesId = anilistId
@@ -748,9 +760,12 @@ ApplicationWindow {
                     fileDialog.open()
                 })
                 item.addToListRequested.connect(function(anilistId) {
-                    if (authManager) {
-                        authManager.addToLibrary({ "anilist_id": anilistId })
+                    if (!authManager || !authManager.authenticated) {
+                        root.notify("Sign in to keep a list.", "error")
+                        return
                     }
+                    authManager.addToLibrary({ "anilist_id": anilistId })
+                    root.notify("Added to My List", "success")
                 })
                 if (item.episodePlayRequested) {
                     item.episodePlayRequested.connect(function(url, titleStr, epLabel, thumb) {
@@ -1440,6 +1455,26 @@ ApplicationWindow {
 
     // ─────────────────────────────────────────────────────────────────────
     // NON-PLAYER ESCAPE KEY HANDLER
+    // ── Toast stack ─────────────────────────────────────────────────────
+    Column {
+        id: toastLayer
+        z: 60
+        anchors { right: parent.right; rightMargin: Theme.s5; bottom: parent.bottom; bottomMargin: root.tabH + Theme.s5 }
+        spacing: Theme.s2
+        visible: !root.inPlayer
+
+        Repeater {
+            model: root.toasts
+            delegate: Toast {
+                required property var modelData
+                width: Math.min(360, implicitWidth)
+                message: modelData.message
+                kind: modelData.kind
+                onFinished: root.dismissToast(modelData.id)
+            }
+        }
+    }
+
     // ── Episode sidebar (watch page) ────────────────────────────────────
     EpisodeSidebar {
         id: episodeSidebar
@@ -1501,6 +1536,20 @@ ApplicationWindow {
 
     // Reuses the existing detail query; the sidebar shows whatever
     // streamingEpisodes the API lists for this id. Nothing here touches mpv.
+    // Section 35. The shell owns the queue; each Toast runs its own hold and
+    // fade and reports back, so nothing here needs per-item timers.
+    function notify(message, kind) {
+        toastSeq += 1
+        var next = toasts.concat([{ id: toastSeq, message: message, kind: kind || "info" }])
+        // Keep the stack short enough that it never covers the content it is
+        // reporting on.
+        toasts = next.length > 3 ? next.slice(next.length - 3) : next
+    }
+
+    function dismissToast(id) {
+        toasts = toasts.filter(function(x) { return x.id !== id })
+    }
+
     function refreshWatchHistory(force) {
         if (watchHistoryLoading) return
         if (watchHistoryLoaded && !force) return
