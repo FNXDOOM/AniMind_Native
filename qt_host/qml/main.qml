@@ -20,36 +20,31 @@ ApplicationWindow {
     Material.theme: Material.Dark
 
     // ── Design tokens ─────────────────────────────────────────────────────
-    // Monochrome near-black. The only "accent" is white: primary actions are
-    // white pills with black text, everything else is a grey tier.
-    readonly property color bg:         "#0a0a0a"
-    readonly property color surface:    "#141414"
-    readonly property color surfaceHi:  "#1e1e1e"
-    readonly property color hairline:   "#262626"
-    readonly property color scrim:      Qt.rgba(0, 0, 0, 0.72)
+    // Values live in Theme.qml. These root aliases exist only so pages that
+    // have not been migrated yet keep compiling; each one is removed as its
+    // last use is rewritten against Theme directly.
+    readonly property color bg:         Theme.bg
+    readonly property color surface:    Theme.card
+    readonly property color hairline:   Theme.borderDefault
 
-    readonly property color textPrimary:   "#ffffff"
-    readonly property color textSecondary: "#b3b3b3"
-    readonly property color textMuted:     "#8a8a8a"
-    readonly property color textFaint:     "#6e6e6e"
+    readonly property color accent:        Theme.accent
+    readonly property color accentSoft:    Theme.accentSoft
+    readonly property color textPrimary:   Theme.textPrimary
+    readonly property color textSecondary: Theme.textSecondary
+    readonly property color textMuted:     Theme.textMuted
 
-    // Kept so not-yet-migrated pages keep compiling.
-    readonly property color ink:          bg
-    readonly property color veil:         "#000000"
-    readonly property color signalOrange: textPrimary
-    readonly property color signalDeep:   "#d9d9d9"
-    readonly property color dusk:         "#3a3a3a"
-    readonly property color accentOrange: textPrimary
-    readonly property color accentPurple: dusk
-    readonly property color clrPrimary:   textPrimary
-    readonly property color clrMuted:     textSecondary
-    readonly property color clrOnSurface: textPrimary
+    // Still-referenced legacy names, held at their current meaning so the
+    // palette shift stays reviewable rather than spraying red everywhere.
+    readonly property color accentOrange: Theme.textPrimary
+    readonly property color clrPrimary:   Theme.textPrimary
+    readonly property color clrMuted:     Theme.textSecondary
+    readonly property color clrOnSurface: Theme.textPrimary
 
     // One neutral grotesque throughout; hierarchy comes from weight and size.
-    readonly property string displayFont: "Segoe UI Variable Display, Segoe UI"
-    readonly property string bodyFont:    "Segoe UI Variable Text, Segoe UI"
-    readonly property string uiFont:      bodyFont
-    readonly property string iconFont:    "Segoe MDL2 Assets"
+    readonly property string displayFont: Theme.displayFont
+    readonly property string bodyFont:    Theme.bodyFont
+    readonly property string uiFont:      Theme.bodyFont
+    readonly property string iconFont:    Theme.iconFont
 
     // ── Responsive scale ──────────────────────────────────────────────────
     // Breakpoints follow content, not devices: the sidebar stops fitting at
