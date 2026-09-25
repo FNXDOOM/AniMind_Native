@@ -1151,6 +1151,10 @@ ApplicationWindow {
         id: playerTopBar
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: root.topH; z: 7
+        // Restored: a Rectangle defaults to white, so with only the gradient to
+        // set its colour, any failure to evaluate that gradient turns the whole
+        // overlay white instead of leaving it transparent.
+        color: "transparent"
         // One scrim, one fade. The opacity and its Behavior were declared
         // twice on this element, so two animations competed for the same
         // property and the later one silently owned it.
