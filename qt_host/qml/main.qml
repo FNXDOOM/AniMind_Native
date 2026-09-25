@@ -288,6 +288,13 @@ ApplicationWindow {
                 })
             }
         }
+        // Section 23: pages must not swap instantly. Folded into the existing
+        // handler because a second onCurrentPageChanged on the same object is a
+        // fatal duplicate. Explicit animation, not a Behavior: two assignments
+        // in one turn leave a Behavior with no net change to play.
+        if (!root.reduceMotion && currentPage !== "player")
+            pageIn.restart()
+
         _wasInPlayer = (currentPage === "player")
     }
 
@@ -576,6 +583,26 @@ ApplicationWindow {
         }
         visible: !root.inPlayer
         z: 5
+
+        // One animatable surface for every page. The Loaders keep
+        // anchors.fill: parent, so the page transition lives here alone.
+        // Sized by binding rather than anchored so x is free to animate.
+        Item {
+            id: pageStage
+            width: pageCanvas.width
+            height: pageCanvas.height
+
+            ParallelAnimation {
+                id: pageIn
+                NumberAnimation { target: pageStage; property: "opacity"
+                                  from: 0.0; to: 1.0
+                                  duration: Theme.dBase; easing.type: Theme.easeOutCubic }
+                NumberAnimation { target: pageStage; property: "x"
+                                  from: Theme.s6; to: 0
+                                  duration: Theme.dBase; easing.type: Theme.easeOutCubic }
+            }
+        }
+
 
         Loader {
             id: homeLoader
