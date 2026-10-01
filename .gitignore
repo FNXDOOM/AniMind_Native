@@ -45,9 +45,8 @@ vendor/mpv/win-x64/libmpv-2.dll
 vendor/mpv/win-x64/mpv-1.dll
 vendor/cef/
 
-# Design and Installer
+# Design mockups (large, not build input)
 Anime streaming design/
-installer.iss
 
 # QML verification harness: capture scripts, test doubles and screenshots
 .g/
