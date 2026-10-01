@@ -12,8 +12,7 @@ import ".."
 //   signal seriesSelected(int anilistId)  — emitted when the user taps a history entry
 //
 // Context properties consumed (set in main.cpp):
-//   supabaseUrl  : string
-//   supabaseKey  : string
+//   api          : BackendApi   — history rows arrive through onHistoryLoaded
 //   authManager  : AuthManager
 
 Item {
@@ -33,19 +32,10 @@ Item {
     property string errorText:      app ? app.watchHistoryError   : ""
 
     // ── Design tokens ──────────────────────────────────────────────────────
-    readonly property color clrBackground:         Theme.bg
-    readonly property color clrPrimary:            Theme.textPrimary
-    readonly property color clrMuted:              Theme.textSecondary
-    readonly property color clrOnSurface:          Theme.textPrimary
-    readonly property color clrAccent:             Theme.textPrimary
-    readonly property color clrBorder:             Theme.borderDefault
-    readonly property color clrSurface:            Theme.card
-    readonly property color clrError:              Theme.accent
-
     // ── Background ─────────────────────────────────────────────────────────
     Rectangle {
         anchors.fill: parent
-        color: root.clrBackground
+        color: Theme.bg
     }
 
     // ── Activation timer (50 ms delay before first load) ───────────────────
@@ -196,7 +186,7 @@ Item {
                 rightMargin: 24
             }
             text: "Watch History"
-            color: root.clrOnSurface
+            color: Theme.textPrimary
             font.family: Theme.displayFont
             font.pixelSize: 26
             font.bold: true
@@ -231,7 +221,7 @@ Item {
                 color: rowMa.containsMouse
                        ? Qt.rgba(1, 1, 1, 0.05)
                        : Qt.rgba(0, 0, 0, 0)
-                border.color: root.clrBorder
+                border.color: Theme.borderDefault
                 border.width: 1
 
                 Behavior on color { ColorAnimation { duration: 150 } }
@@ -270,7 +260,7 @@ Item {
                         Text {
                             width: parent.width
                             text: rowRoot.modelData.show_title || ""
-                            color: rowMa.containsMouse ? root.clrPrimary : root.clrOnSurface
+                            color: rowMa.containsMouse ? Theme.textPrimary : Theme.textPrimary
                             font.family: Theme.displayFont
                             font.pixelSize: 14
                             font.bold: true
@@ -281,7 +271,7 @@ Item {
                         Text {
                             width: parent.width
                             text: rowRoot.modelData.episode_label || ""
-                            color: root.clrMuted
+                            color: Theme.textSecondary
                             font.family: Theme.bodyFont
                             font.pixelSize: 12
                             elide: Text.ElideRight
@@ -310,7 +300,7 @@ Item {
                         Text {
                             width: parent.width
                             text: (rowRoot.modelData.progress_pct || 0) + "%"
-                            color: root.clrMuted
+                            color: Theme.textSecondary
                             font.family: Theme.bodyFont
                             font.pixelSize: 10
                             horizontalAlignment: Text.AlignRight
