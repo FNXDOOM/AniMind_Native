@@ -29,6 +29,17 @@ add_executable(AnimindQtHost
     src/main.cpp
     src/auth_manager.cpp
     src/auth_manager.h
+    src/backend_api.cpp
+    src/backend_api.h
+    src/backend_config.h
+    src/syncplay_client.cpp
+    src/syncplay_client.h
+    src/clock_estimator.cpp
+    src/clock_estimator.h
+    src/sync_decision.cpp
+    src/sync_decision.h
+    src/sync_telemetry.cpp
+    src/sync_telemetry.h
     src/mpv_item.cpp
     src/mpv_item.h
     "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc"
@@ -102,3 +113,26 @@ if(WINDEPLOYQT_EXE)
         COMMENT "Running windeployqt..."
     )
 endif()
+
+# --------------------------------------------------------------------------
+# Pure-layer tests: the clock estimator, the decision function and telemetry.
+#
+# These three have no socket, no player and no QML, which is the point: the
+# ordering, hysteresis and scheduling rules can be asserted against supplied
+# instants instead of waited for. Qt::Test only, so they run headless.
+# --------------------------------------------------------------------------
+find_package(Qt6 REQUIRED COMPONENTS Test)
+enable_testing()
+
+add_executable(syncCoreTests
+    tests/cpp/sync_core_test.cpp
+    src/clock_estimator.cpp
+    src/clock_estimator.h
+    src/sync_decision.cpp
+    src/sync_decision.h
+    src/sync_telemetry.cpp
+    src/sync_telemetry.h
+)
+target_include_directories(syncCoreTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(syncCoreTests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME syncCoreTests COMMAND syncCoreTests)

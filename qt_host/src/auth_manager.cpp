@@ -1,63 +1,182 @@
 #include "auth_manager.h"
 
-#include <QDesktopServices>
+#include "backend_config.h"
+
 #include <QDateTime>
+#include <QDesktopServices>
+#include <QDebug>
 #include <QDir>
-#include <QEventLoop>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QRegularExpression>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QTcpSocket>
 #include <QUrl>
 #include <QUrlQuery>
-#include <QDebug>
 #include <climits>
 
 namespace {
 constexpr quint16 kBridgePort = 27182;
 constexpr int kBridgeTimeoutMs = 180000;
-const char* kBridgeUrl = "https://fnxdoom.in/desktop-auth";
-const char* kDefaultBackendBaseUrl = "https://api.fnxdoom.in";
+
+QString deviceId()
+{
+    const QString unique = QString::fromUtf8(QSysInfo::machineUniqueId());
+    return unique.isEmpty() ? QSysInfo::machineHostName() : unique;
 }
 
-AuthManager::AuthManager(QObject* parent)
+// The API answers with access_token; a session token under that other name is kept as a
+// fallback so a renamed field cannot silently break sign-in.
+QString sessionTokenFrom(const QVariantMap& payload)
+{
+    const QString primary = payload.value(QStringLiteral("access_token")).toString();
+    return primary.isEmpty() ? payload.value(QStringLiteral("token")).toString() : primary;
+}
+
+qint64 expiryFrom(const QJsonObject& obj){
+    // An explicit instant wins over a duration: the server states both, and the
+    // instant is the one it actually pins to the session row.
+    if (obj.value(QStringLiteral("access_token_expires_at")).isString()) {
+        const QDateTime when = QDateTime::fromString(obj.value(QStringLiteral("access_token_expires_at")).toString(), Qt::ISODate);
+        if (when.isValid())
+            return when.toMSecsSinceEpoch();
+    }
+    const qint64 seconds = static_cast<qint64>(obj.value(QStringLiteral("expires_in")).toDouble(0));
+    return seconds > 0 ? QDateTime::currentMSecsSinceEpoch() + seconds * 1000 : 0;
+}
+
+QString dataDir()
+{
+    QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (base.isEmpty())
+        base = QDir::homePath() + QStringLiteral("/AnimindQt");
+    QDir().mkpath(base);
+    return base;
+}
+}
+
+AuthManager::AuthManager(BackendApi* api, QObject* parent)
     : QObject(parent)
+    , api_(api)
 {
     connect(&server_, &QTcpServer::newConnection, this, &AuthManager::onNewConnection);
     timeout_.setSingleShot(true);
     connect(&timeout_, &QTimer::timeout, this, &AuthManager::onAuthTimeout);
     refreshTimer_.setSingleShot(true);
     connect(&refreshTimer_, &QTimer::timeout, this, &AuthManager::onRefreshTimeout);
-    // Defer session restore until after the Qt event loop starts.
-    // syncLibraryFromServer() uses a blocking QEventLoop for network calls;
-    // calling it before app.exec() causes a crash / deadlock.
+
+    if (api_) {
+        connect(api_, &BackendApi::watchlistLoaded, this, [this](const QVariantList& rows) {
+            setLibraryLoading(false);
+            setLibrary(rows);
+        });
+        connect(api_, &BackendApi::watchlistSaved, this, [this](const QString& animeId, const QString& status) {
+            for (int i = 0; i < libraryShows_.size(); ++i) {
+                QVariantMap item = libraryShows_[i].toMap();
+                if (item.value(QStringLiteral("anime_id")).toString() == animeId) {
+                    item.insert(QStringLiteral("userStatus"), status);
+                    item.insert(QStringLiteral("status"), status);
+                    libraryShows_[i] = item;
+                    emit libraryShowsChanged();
+                    persistLibraryCache(libraryShows_);
+                    return;
+                }
+            }
+            refreshLibrary();
+        });
+        connect(api_, &BackendApi::requestFailed, this, [this](const QString& endpoint, int status, const QString& message) {
+            if (endpoint != QStringLiteral("watchlist"))
+                return;
+            setLibraryLoading(false);
+            if (status == 401)
+                setError(QStringLiteral("Your session expired. Sign in again."));
+            else if (!message.isEmpty())
+                setError(message);
+        });
+    }
+
+    // Restore touches the network, so it has to wait for the event loop to be running.
     QTimer::singleShot(0, this, [this]() { restoreSession(); });
 }
 
 bool AuthManager::authenticated() const
 {
-    if (accessToken_.isEmpty() || userId_.isEmpty() || expiresAtMs_ <= 0) {
+    if (accessToken_.isEmpty() || userId_.isEmpty() || expiresAtMs_ <= 0)
         return false;
-    }
     return QDateTime::currentMSecsSinceEpoch() < expiresAtMs_;
+}
+
+bool AuthManager::ensureValidToken()
+{
+    if (authenticated())
+        return true;
+    if (!refreshToken_.isEmpty()) {
+        request(QNetworkAccessManager::PostOperation, QStringLiteral("/api/auth/desktop/refresh"),
+                QJsonDocument(QJsonObject{{QStringLiteral("refresh_token"), refreshToken_}}).toJson(QJsonDocument::Compact),
+                QByteArray(), [this](bool ok, int, const QVariantMap& payload) {
+                    if (!ok) {
+                        setError(QStringLiteral("Sign-in expired. Please sign in again."));
+                        return;
+                    }
+                    applyTokens(payload);
+                });
+    }
+    return false;
+}
+
+void AuthManager::request(const QNetworkAccessManager::Operation operation,
+                          const QString& path,
+                          const QByteArray& body,
+                          const QByteArray& bearerOverride,
+                          std::function<void(bool, int, const QVariantMap&)> done)
+{
+    QNetworkRequest req{backend::url(path)};
+    req.setRawHeader("Accept", "application/json");
+    req.setRawHeader("User-Agent", "Animind-Qt/1.0");
+    req.setTransferTimeout(15000);
+    if (!body.isEmpty())
+        req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+
+    const QByteArray bearer = bearerOverride.isNull() ? accessToken_.toUtf8() : bearerOverride;
+    if (!bearer.isEmpty())
+        req.setRawHeader("Authorization", QByteArray("Bearer ") + bearer);
+
+    QNetworkReply* reply = nullptr;
+    switch (operation) {
+    case QNetworkAccessManager::PostOperation:
+        reply = net_.post(req, body);
+        break;
+    default:
+        reply = net_.get(req);
+        break;
+    }
+
+    connect(reply, &QNetworkReply::finished, this, [reply, done]() {
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        const QVariantMap payload = doc.isObject() ? doc.object().toVariantMap() : QVariantMap();
+        const bool ok = reply->error() == QNetworkReply::NoError;
+        if (!ok && status == 0)
+            qWarning() << "Auth request failed:" << reply->errorString();
+        reply->deleteLater();
+        done(ok, status, payload);
+    });
 }
 
 void AuthManager::signInWithBrowserBridge()
 {
     if (signingIn_) {
-        setError("A sign-in is already in progress.");
+        setError(QStringLiteral("A sign-in is already in progress."));
         return;
     }
-
     setError(QString());
 
     if (!server_.listen(QHostAddress::LocalHost, kBridgePort)) {
-        setError(QString("Port %1 is already in use.").arg(kBridgePort));
+        setError(QStringLiteral("Port %1 is already in use.").arg(kBridgePort));
         return;
     }
 
@@ -65,934 +184,556 @@ void AuthManager::signInWithBrowserBridge()
     emit signingInChanged();
     timeout_.start(kBridgeTimeoutMs);
 
-    if (!QDesktopServices::openUrl(QUrl(QString::fromUtf8(kBridgeUrl)))) {
-        server_.close();
-        timeout_.stop();
+    if (!QDesktopServices::openUrl(QUrl(backend::desktopAuthUrl()))) {
+        closeBridge();
         signingIn_ = false;
         emit signingInChanged();
-        setError("Failed to open browser for sign-in.");
+        setError(QStringLiteral("Failed to open a browser for sign-in."));
     }
+}
+
+void AuthManager::beginPasswordFlow(const QString& email, const QString& password, const QString& username, bool signup)
+{
+    const QString trimmedEmail = email.trimmed().toLower();
+    if (trimmedEmail.isEmpty() || password.isEmpty()) {
+        const QString message = QStringLiteral("Email and password are required.");
+        setError(message);
+        emit signInFailed(message);
+        return;
+    }
+
+    setError(QString());
+    signingIn_ = true;
+    emit signingInChanged();
+
+    QJsonObject body;
+    body.insert(QStringLiteral("email"), trimmedEmail);
+    body.insert(QStringLiteral("password"), password);
+    if (signup) {
+        const QString chosen = username.trimmed();
+        body.insert(QStringLiteral("username"), chosen.isEmpty() ? trimmedEmail.split(QLatin1Char('@')).first() : chosen);
+    }
+
+    request(QNetworkAccessManager::PostOperation,
+            signup ? QStringLiteral("/api/auth/signup") : QStringLiteral("/api/auth/login"),
+            QJsonDocument(body).toJson(QJsonDocument::Compact), QByteArray(),
+            [this, trimmedEmail](bool ok, int status, const QVariantMap& payload) {
+                // The API answers with access_token; older builds of the docs called it
+                // token, so both spellings are accepted rather than trusting one.
+                const QString sessionToken = sessionTokenFrom(payload);
+                if (!ok || sessionToken.isEmpty()) {
+                    signingIn_ = false;
+                    emit signingInChanged();
+                    const QString message = payload.value(QStringLiteral("message")).toString();
+                    const QString failure = !message.isEmpty()
+                        ? message
+                        : (status == 423 ? QStringLiteral("Too many attempts. Try again shortly.")
+                                         : QStringLiteral("Sign-in failed."));
+                    setError(failure);
+                    emit signInFailed(failure);
+                    return;
+                }
+                const QVariantMap user = payload.value(QStringLiteral("user")).toMap();
+                if (!user.isEmpty()) {
+                    // The desktop exchange payload carries no user id, and authenticated()
+                    // requires one: without this a password sign-in stayed "not signed in".
+                    userId_ = user.value(QStringLiteral("id")).toString();
+                    username_ = user.value(QStringLiteral("username")).toString();
+                    avatarUrl_ = user.value(QStringLiteral("avatar_url")).toString();
+                    email_ = user.value(QStringLiteral("email"), email_).toString();
+                    emit sessionChanged();
+                    emit profileChanged();
+                }
+                exchangeForDesktopSession(sessionToken, nullptr,
+                                          user.value(QStringLiteral("email"), trimmedEmail).toString());
+            });
+}
+
+void AuthManager::signInWithPassword(const QString& email, const QString& password)
+{
+    beginPasswordFlow(email, password, QString(), false);
+}
+
+void AuthManager::signUpWithPassword(const QString& email, const QString& password, const QString& username)
+{
+    beginPasswordFlow(email, password, username, true);
+}
+
+// The browser hands over either a bridge JWT (site sign-in) or a one-time
+// auth_code (Google), and the exchange turns either into the desktop pair.
+void AuthManager::exchangeForDesktopSession(const QString& bearer, QTcpSocket* replySocket, const QString& handoffEmail)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("deviceName"), QStringLiteral("Animind Qt Desktop"));
+    body.insert(QStringLiteral("deviceId"), deviceId());
+
+    request(QNetworkAccessManager::PostOperation, QStringLiteral("/api/auth/desktop/exchange"),
+            QJsonDocument(body).toJson(QJsonDocument::Compact), bearer.toUtf8(),
+            [this, replySocket, handoffEmail](bool ok, int, const QVariantMap& payload) {
+                const QJsonObject obj = QJsonObject::fromVariantMap(payload);
+                const QString access = payload.value(QStringLiteral("access_token")).toString();
+                const QString refresh = payload.value(QStringLiteral("refresh_token")).toString();
+                const qint64 expMs = expiryFrom(obj);
+                if (!ok || access.isEmpty() || refresh.isEmpty() || expMs <= 0) {
+                    if (replySocket)
+                        respondToBrowser(replySocket, 500, QStringLiteral("Sign-in failed"),
+                                         QStringLiteral("The desktop session could not be created."));
+                    signingIn_ = false;
+                    emit signingInChanged();
+                    setError(QStringLiteral("Could not create a desktop session."));
+                    emit signInFailed(lastError_);
+                    return;
+                }
+
+                accessToken_ = access;
+                refreshToken_ = refresh;
+                sessionId_ = payload.value(QStringLiteral("session_id")).toString();
+                expiresAtMs_ = expMs;
+
+                const QString fromPayload = payload.value(QStringLiteral("user_id")).toString();
+                finishSignIn(fromPayload.isEmpty() ? userId_ : fromPayload, handoffEmail, expMs);
+
+                if (replySocket)
+                    respondToBrowser(replySocket, 200, QStringLiteral("Sign-in complete"),
+                                     QStringLiteral("You can close this tab and return to Animind."));
+            });
+}
+
+void AuthManager::finishSignIn(const QString& userId, const QString& email, qint64 expMs)
+{
+    timeout_.stop();
+    closeBridge();
+    signingIn_ = false;
+    emit signingInChanged();
+
+    userId_ = userId;
+    if (!email.isEmpty())
+        email_ = email;
+    expiresAtMs_ = expMs;
+    persistSession();
+    scheduleRefreshTimer();
+    emit sessionChanged();
+    emit signInSucceeded();
+
+    // The desktop token identifies the device; the profile endpoint fills in the
+    // avatar and display name the shell shows.
+    request(QNetworkAccessManager::GetOperation, QStringLiteral("/api/auth/me"), QByteArray(), QByteArray(),
+            [this](bool ok, int, const QVariantMap& payload) {
+                const QVariantMap user = payload.value(QStringLiteral("user")).toMap();
+                if (!ok || user.isEmpty())
+                    return;
+                userId_ = user.value(QStringLiteral("id"), userId_).toString();
+                email_ = user.value(QStringLiteral("email"), email_).toString();
+                username_ = user.value(QStringLiteral("username")).toString();
+                avatarUrl_ = user.value(QStringLiteral("avatar_url")).toString();
+                persistSession();
+                emit sessionChanged();
+                emit profileChanged();
+            });
+
+    refreshLibrary();
+}
+
+void AuthManager::onNewConnection()
+{
+    QTcpSocket* socket = server_.nextPendingConnection();
+    if (!socket)
+        return;
+
+    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
+        const QByteArray raw = socket->readAll();
+        const QList<QByteArray> lines = raw.split('\n');
+        if (lines.isEmpty())
+            return;
+        const QList<QByteArray> parts = lines.first().trimmed().split(' ');
+        if (parts.size() < 2)
+            return;
+
+        const QUrl url(QStringLiteral("http://localhost") + QString::fromUtf8(parts.at(1)));
+        const QUrlQuery query(url);
+        const QString token = query.queryItemValue(QStringLiteral("token"));
+        const QString authCode = query.queryItemValue(QStringLiteral("auth_code"));
+
+        if (!token.isEmpty()) {
+            exchangeForDesktopSession(token, socket, QString());
+            return;
+        }
+        if (!authCode.isEmpty()) {
+            // A one-time code becomes a session, then the session becomes a desktop pair.
+            request(QNetworkAccessManager::PostOperation, QStringLiteral("/api/auth/consume-code"),
+                    QJsonDocument(QJsonObject{{QStringLiteral("code"), authCode}}).toJson(QJsonDocument::Compact),
+                    QByteArray(), [this, socket](bool ok, int, const QVariantMap& payload) {
+                        const QString sessionToken = sessionTokenFrom(payload);
+                        if (!ok || sessionToken.isEmpty()) {
+                            respondToBrowser(socket, 400, QStringLiteral("Sign-in failed"),
+                                             QStringLiteral("That sign-in link has expired."));
+                            return;
+                        }
+                        exchangeForDesktopSession(sessionToken, socket, QString());
+                    });
+            return;
+        }
+
+        respondToBrowser(socket, 400, QStringLiteral("Sign-in failed"), QStringLiteral("No token was received."));
+    });
+
+    connect(socket, &QTcpSocket::disconnected, socket, &QTcpSocket::deleteLater);
+}
+
+void AuthManager::respondToBrowser(QTcpSocket* socket, int status, const QString& heading, const QString& detail)
+{
+    if (!socket)
+        return;
+    const QByteArray body = QStringLiteral(
+                                "<html><body style=\"font-family:sans-serif;background:#07090C;color:#F2F4F8;text-align:center;padding-top:48px\">"
+                                "<h2>%1</h2><p style=\"opacity:.75\">%2</p></body></html>")
+                                .arg(heading, detail)
+                                .toUtf8();
+    const QByteArray head = status == 200
+        ? QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n")
+        : QStringLiteral("HTTP/1.1 %1 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n")
+              .arg(status)
+              .toUtf8();
+    socket->write(head);
+    socket->write(body);
+    socket->disconnectFromHost();
+}
+
+void AuthManager::closeBridge()
+{
+    if (server_.isListening())
+        server_.close();
+}
+
+void AuthManager::onAuthTimeout()
+{
+    closeBridge();
+    if (!signingIn_)
+        return;
+    signingIn_ = false;
+    emit signingInChanged();
+    setError(QStringLiteral("Sign-in timed out. Please try again."));
+}
+
+void AuthManager::onRefreshTimeout()
+{
+    if (refreshToken_.isEmpty())
+        return;
+    request(QNetworkAccessManager::PostOperation, QStringLiteral("/api/auth/desktop/refresh"),
+            QJsonDocument(QJsonObject{{QStringLiteral("refresh_token"), refreshToken_}}).toJson(QJsonDocument::Compact),
+            QByteArray(), [this](bool ok, int, const QVariantMap& payload) {
+                if (!ok) {
+                    qWarning() << "Session refresh failed; keeping current session until re-auth.";
+                    return;
+                }
+                applyTokens(payload);
+            });
+}
+
+void AuthManager::applyTokens(const QVariantMap& payload)
+{
+    const QJsonObject obj = QJsonObject::fromVariantMap(payload);
+    const QString access = payload.value(QStringLiteral("access_token")).toString();
+    const QString refresh = payload.value(QStringLiteral("refresh_token")).toString();
+    const qint64 expMs = expiryFrom(obj);
+    if (access.isEmpty() || refresh.isEmpty() || expMs <= 0)
+        return;
+
+    accessToken_ = access;
+    refreshToken_ = refresh;
+    const QString sid = payload.value(QStringLiteral("session_id")).toString();
+    if (!sid.isEmpty())
+        sessionId_ = sid;
+    expiresAtMs_ = expMs;
+
+    if (api_)
+        api_->setAccessToken(access);
+
+    persistSession();
+    scheduleRefreshTimer();
+    emit sessionChanged();
 }
 
 void AuthManager::signOut()
 {
-    revokeDesktopSessionBestEffort();
+    if (!refreshToken_.isEmpty() || !accessToken_.isEmpty()) {
+        QJsonObject body;
+        if (!refreshToken_.isEmpty())
+            body.insert(QStringLiteral("refresh_token"), refreshToken_);
+        request(QNetworkAccessManager::PostOperation, QStringLiteral("/api/auth/desktop/revoke"),
+                QJsonDocument(body).toJson(QJsonDocument::Compact), QByteArray(),
+                [](bool ok, int, const QVariantMap&) {
+                    if (!ok)
+                        qWarning() << "Revoke was not confirmed; the local session is still cleared.";
+                });
+    }
+
     timeout_.stop();
     refreshTimer_.stop();
-    if (server_.isListening()) {
-        server_.close();
-    }
+    closeBridge();
     signingIn_ = false;
     emit signingInChanged();
 
     userId_.clear();
     email_.clear();
+    username_.clear();
+    avatarUrl_.clear();
     accessToken_.clear();
     refreshToken_.clear();
     sessionId_.clear();
     expiresAtMs_ = 0;
     libraryShows_.clear();
-    supabaseToken_.clear();
-    supabaseTokenExpiresMs_ = 0;
-    emit sessionChanged();
+    if (api_)
+        api_->setAccessToken(QString());
     emit libraryShowsChanged();
+    emit sessionChanged();
+    emit profileChanged();
 
     QFile::remove(sessionFilePath());
     QFile::remove(libraryCacheFilePath());
 }
 
-void AuthManager::onAuthTimeout()
+void AuthManager::scheduleRefreshTimer()
 {
-    if (server_.isListening()) {
-        server_.close();
-    }
-    if (!signingIn_) {
+    refreshTimer_.stop();
+    if (expiresAtMs_ <= 0)
         return;
-    }
-    signingIn_ = false;
-    emit signingInChanged();
-    setError("Sign-in timed out. Please try again.");
-}
-
-void AuthManager::onRefreshTimeout()
-{
-    if (!refreshSessionToken()) {
-        qWarning() << "Session refresh failed; keeping current session state until re-auth is needed.";
-    }
-}
-
-void AuthManager::onNewConnection()
-{
-    auto* socket = server_.nextPendingConnection();
-    if (!socket) {
-        return;
-    }
-
-    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
-        const QByteArray request = socket->readAll();
-        const QList<QByteArray> lines = request.split('\n');
-        if (lines.isEmpty()) {
-            return;
-        }
-
-        const QByteArray reqLine = lines.first().trimmed();
-        const QList<QByteArray> parts = reqLine.split(' ');
-        if (parts.size() < 2) {
-            return;
-        }
-
-        const QByteArray path = parts.at(1);
-        const QUrl url(QString::fromUtf8("http://localhost") + QString::fromUtf8(path));
-        const QUrlQuery query(url);
-        const QString token = query.queryItemValue("token");
-        const QString sessionIdFromQuery = query.queryItemValue("sessionId");
-
-        QByteArray responseBody;
-        if (token.isEmpty()) {
-            responseBody = "<html><body><h2>Sign-in failed</h2><p>No token received.</p></body></html>";
-            socket->write("HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n");
-            socket->write(responseBody);
-            socket->disconnectFromHost();
-            return;
-        }
-
-        QString parsedUserId;
-        QString parsedSessionId;
-        qint64 expMs = 0;
-        if (!decodeJwt(token, parsedUserId, parsedSessionId, expMs)) {
-            responseBody = "<html><body><h2>Sign-in failed</h2><p>Token decode failed.</p></body></html>";
-            socket->write("HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n");
-            socket->write(responseBody);
-            socket->disconnectFromHost();
-            setError("Received token but failed to decode it.");
-            return;
-        }
-
-        QByteArray payloadB64 = token.split('.').value(1).toUtf8();
-        payloadB64.replace('-', '+');
-        payloadB64.replace('_', '/');
-        while (payloadB64.size() % 4 != 0) {
-            payloadB64.append('=');
-        }
-        const QByteArray payload = QByteArray::fromBase64(payloadB64);
-        QString parsedEmail = extractJsonString(payload, "email");
-        if (parsedEmail.isEmpty()) parsedEmail = extractJsonString(payload, "email_address");
-        if (parsedEmail.isEmpty()) parsedEmail = extractJsonString(payload, "primary_email_address");
-        if (parsedEmail.isEmpty()) parsedEmail = extractLikelyEmail(payload);
-
-        QString finalSessionId = !sessionIdFromQuery.isEmpty() ? sessionIdFromQuery : parsedSessionId;
-        const QString clerkFapi = deriveClerkFapiFromTokenPayload(payload);
-        if (!clerkFapi.isEmpty() && (parsedEmail.isEmpty() || finalSessionId.isEmpty())) {
-            QNetworkRequest req(QUrl(clerkFapi + "/v1/client"));
-            req.setRawHeader("Accept", "application/json");
-            req.setRawHeader("Authorization", QString("Bearer %1").arg(token).toUtf8());
-            auto* reply = net_.get(req);
-            QEventLoop loop;
-            connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-            loop.exec();
-
-            if (reply->error() == QNetworkReply::NoError) {
-                const auto doc = QJsonDocument::fromJson(reply->readAll());
-                if (doc.isObject()) {
-                    const auto root = doc.object();
-                    if (finalSessionId.isEmpty())
-                        finalSessionId = resolveSessionIdFromClientResponse(root, parsedSessionId);
-                    if (parsedEmail.isEmpty())
-                        parsedEmail = resolveEmailFromClientResponse(root, finalSessionId.isEmpty() ? parsedSessionId : finalSessionId);
-                }
-            }
-            reply->deleteLater();
-        }
-
-        QString desktopAccessToken;
-        QString desktopRefreshToken;
-        QString desktopSessionId;
-        qint64 desktopExpMs = 0;
-        if (!exchangeClerkTokenForDesktopSession(token, desktopAccessToken, desktopRefreshToken, desktopSessionId, desktopExpMs)) {
-            responseBody = "<html><body><h2>Sign-in failed</h2><p>Desktop token exchange failed.</p></body></html>";
-            socket->write("HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n");
-            socket->write(responseBody);
-            socket->disconnectFromHost();
-            setError("Failed to exchange sign-in token with backend desktop session.");
-            return;
-        }
-
-        if (!desktopSessionId.isEmpty()) finalSessionId = desktopSessionId;
-        finishSignInSuccess(parsedUserId, parsedEmail, desktopAccessToken, finalSessionId, desktopExpMs);
-        refreshToken_ = desktopRefreshToken;
-        persistSession();
-
-        responseBody = "<html><body><h2>Sign-in complete</h2><p>You can close this tab and return to Animind.</p></body></html>";
-        socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n");
-        socket->write(responseBody);
-        socket->disconnectFromHost();
-    });
-}
-
-bool AuthManager::decodeJwt(const QString& jwt, QString& outUserId, QString& outSessionId, qint64& outExpMs) const
-{
-    const QStringList parts = jwt.split('.');
-    if (parts.size() < 2) {
-        return false;
-    }
-
-    QByteArray b64 = parts.at(1).toUtf8();
-    b64.replace('-', '+');
-    b64.replace('_', '/');
-    while (b64.size() % 4 != 0) {
-        b64.append('=');
-    }
-
-    const QByteArray payload = QByteArray::fromBase64(b64);
-    if (payload.isEmpty()) {
-        return false;
-    }
-
-    outUserId = extractJsonString(payload, "sub");
-    outSessionId = extractJsonString(payload, "sid");
-    const qint64 expSec = extractJsonNumber(payload, "exp");
-    outExpMs = expSec > 0 ? expSec * 1000 : (QDateTime::currentMSecsSinceEpoch() + 3600 * 1000);
-    return !outUserId.isEmpty();
-}
-
-QString AuthManager::extractJsonString(const QByteArray& json, const QString& key) const
-{
-    const QJsonDocument doc = QJsonDocument::fromJson(json);
-    if (!doc.isObject()) {
-        return QString();
-    }
-    const QJsonObject obj = doc.object();
-    return obj.value(key).toString();
-}
-
-qint64 AuthManager::extractJsonNumber(const QByteArray& json, const QString& key) const
-{
-    const QJsonDocument doc = QJsonDocument::fromJson(json);
-    if (!doc.isObject()) {
-        return 0;
-    }
-    const QJsonObject obj = doc.object();
-    return static_cast<qint64>(obj.value(key).toDouble(0));
-}
-
-QString AuthManager::extractLikelyEmail(const QByteArray& json) const
-{
-    const QString txt = QString::fromUtf8(json);
-    static const QRegularExpression re(
-        R"(([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}))",
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpressionMatch match = re.match(txt);
-    return match.hasMatch() ? match.captured(1) : QString();
-}
-
-QString AuthManager::deriveClerkFapiFromTokenPayload(const QByteArray& payload) const
-{
-    const QJsonDocument doc = QJsonDocument::fromJson(payload);
-    if (!doc.isObject()) return QString();
-    const QJsonObject obj = doc.object();
-    QString iss = obj.value("iss").toString();
-    if (!iss.isEmpty()) {
-        QUrl u(iss);
-        if (u.isValid() && !u.scheme().isEmpty() && !u.host().isEmpty()) {
-            return u.scheme() + "://" + u.host();
-        }
-    }
-    return QStringLiteral("https://clerk.fnxdoom.in");
-}
-
-QString AuthManager::resolveSessionIdFromClientResponse(const QJsonObject& root, const QString& preferredSessionId) const
-{
-    QJsonArray sessions = root.value("client").toObject().value("sessions").toArray();
-    if (sessions.isEmpty()) sessions = root.value("sessions").toArray();
-    if (sessions.isEmpty()) return preferredSessionId;
-
-    if (!preferredSessionId.isEmpty()) {
-        for (const auto& v : sessions) {
-            const auto o = v.toObject();
-            if (o.value("id").toString() == preferredSessionId) return preferredSessionId;
-        }
-    }
-    return sessions.first().toObject().value("id").toString();
-}
-
-QString AuthManager::resolveEmailFromClientResponse(const QJsonObject& root, const QString& preferredSessionId) const
-{
-    QJsonArray sessions = root.value("client").toObject().value("sessions").toArray();
-    if (sessions.isEmpty()) sessions = root.value("sessions").toArray();
-    if (sessions.isEmpty()) return QString();
-
-    QJsonObject selected = sessions.first().toObject();
-    if (!preferredSessionId.isEmpty()) {
-        for (const auto& v : sessions) {
-            const auto o = v.toObject();
-            if (o.value("id").toString() == preferredSessionId) {
-                selected = o;
-                break;
-            }
-        }
-    }
-
-    const auto user = selected.value("user").toObject();
-    const auto emails = user.value("email_addresses").toArray();
-    if (!emails.isEmpty()) {
-        return emails.first().toObject().value("email_address").toString();
-    }
-    return QString();
+    qint64 msUntil = expiresAtMs_ - QDateTime::currentMSecsSinceEpoch() - 30000;
+    if (msUntil < 15000)
+        msUntil = 15000;
+    if (msUntil > INT_MAX)
+        msUntil = INT_MAX;
+    refreshTimer_.start(static_cast<int>(msUntil));
 }
 
 void AuthManager::setError(const QString& error)
 {
-    if (lastError_ == error) {
+    if (lastError_ == error)
         return;
-    }
     lastError_ = error;
     emit lastErrorChanged();
 }
 
 QString AuthManager::sessionFilePath() const
 {
-    QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    if (base.isEmpty()) {
-        base = QDir::homePath() + "/AnimindQt";
-    }
-    QDir().mkpath(base);
-    return base + "/session.json";
+    return dataDir() + QStringLiteral("/session.json");
 }
 
 void AuthManager::persistSession() const
 {
     QJsonObject obj;
-    obj.insert("userId", userId_);
-    obj.insert("email", email_);
-    obj.insert("accessToken", accessToken_);
-    obj.insert("refreshToken", refreshToken_);
-    obj.insert("sessionId", sessionId_);
-    obj.insert("expiresAt", static_cast<double>(expiresAtMs_));
+    obj.insert(QStringLiteral("userId"), userId_);
+    obj.insert(QStringLiteral("email"), email_);
+    obj.insert(QStringLiteral("username"), username_);
+    obj.insert(QStringLiteral("avatarUrl"), avatarUrl_);
+    obj.insert(QStringLiteral("accessToken"), accessToken_);
+    obj.insert(QStringLiteral("refreshToken"), refreshToken_);
+    obj.insert(QStringLiteral("sessionId"), sessionId_);
+    obj.insert(QStringLiteral("expiresAt"), static_cast<double>(expiresAtMs_));
 
     QFile f(sessionFilePath());
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return;
-    }
     f.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    // Tokens stay in the per-user profile directory, never world-readable.
+    f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 }
 
 void AuthManager::restoreSession()
 {
     QFile f(sessionFilePath());
-    if (!f.exists() || !f.open(QIODevice::ReadOnly)) {
+    if (!f.exists() || !f.open(QIODevice::ReadOnly))
         return;
-    }
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
-    if (!doc.isObject()) {
+    if (!doc.isObject())
         return;
-    }
     const QJsonObject obj = doc.object();
-    userId_ = obj.value("userId").toString();
-    email_ = obj.value("email").toString();
-    accessToken_ = obj.value("accessToken").toString();
-    refreshToken_ = obj.value("refreshToken").toString();
-    sessionId_ = obj.value("sessionId").toString();
-    expiresAtMs_ = static_cast<qint64>(obj.value("expiresAt").toDouble(0));
 
-    if (!authenticated() && !refreshToken_.isEmpty()) {
-        refreshDesktopSession();
-    }
+    userId_ = obj.value(QStringLiteral("userId")).toString();
+    email_ = obj.value(QStringLiteral("email")).toString();
+    username_ = obj.value(QStringLiteral("username")).toString();
+    avatarUrl_ = obj.value(QStringLiteral("avatarUrl")).toString();
+    accessToken_ = obj.value(QStringLiteral("accessToken")).toString();
+    refreshToken_ = obj.value(QStringLiteral("refreshToken")).toString();
+    sessionId_ = obj.value(QStringLiteral("sessionId")).toString();
+    expiresAtMs_ = static_cast<qint64>(obj.value(QStringLiteral("expiresAt")).toDouble(0));
+    if (api_)
+        api_->setAccessToken(accessToken_);
+
+    loadLibraryCache();
+    emit sessionChanged();
+    emit profileChanged();
 
     if (!authenticated()) {
-        userId_.clear();
-        email_.clear();
-        accessToken_.clear();
-        refreshToken_.clear();
-        sessionId_.clear();
-        expiresAtMs_ = 0;
-        libraryShows_.clear();
-        QFile::remove(sessionFilePath());
-        QFile::remove(libraryCacheFilePath());
-        emit libraryShowsChanged();
-    } else {
-        // If token is close to expiry, refresh eagerly on restore.
-        if (expiresAtMs_ - QDateTime::currentMSecsSinceEpoch() < 120000) {
-            refreshSessionToken();
-        } else {
-            scheduleRefreshTimer();
+        if (refreshToken_.isEmpty()) {
+            signOut();
+            return;
         }
-        QFile lf(libraryCacheFilePath());
-        if (lf.exists() && lf.open(QIODevice::ReadOnly)) {
-            const QJsonDocument ldoc = QJsonDocument::fromJson(lf.readAll());
-            if (ldoc.isObject()) {
-                const QJsonArray items = ldoc.object().value("items").toArray();
-                libraryShows_.clear();
-                libraryShows_.reserve(items.size());
-                for (const auto& item : items) {
-                    if (item.isObject()) {
-                        libraryShows_.push_back(item.toObject().toVariantMap());
+        request(QNetworkAccessManager::PostOperation, QStringLiteral("/api/auth/desktop/refresh"),
+                QJsonDocument(QJsonObject{{QStringLiteral("refresh_token"), refreshToken_}}).toJson(QJsonDocument::Compact),
+                QByteArray(), [this](bool ok, int, const QVariantMap& payload) {
+                    if (!ok) {
+                        signOut();
+                        return;
                     }
-                }
-                emit libraryShowsChanged();
-            }
-        }
-        syncLibraryFromServer();
+                    applyTokens(payload);
+                    refreshLibrary();
+                });
+        return;
     }
-}
 
-void AuthManager::finishSignInSuccess(const QString& userId, const QString& email, const QString& token, const QString& sessionId, qint64 expMs)
-{
-    timeout_.stop();
-    server_.close();
-    signingIn_ = false;
-    emit signingInChanged();
-
-    userId_ = userId;
-    email_ = email;
-    accessToken_ = token;
-    sessionId_ = sessionId;
-    expiresAtMs_ = expMs;
-    persistSession();
-    scheduleRefreshTimer();
-    syncLibraryFromServer();
-    emit sessionChanged();
+    if (expiresAtMs_ - QDateTime::currentMSecsSinceEpoch() < 120000)
+        onRefreshTimeout();
+    else
+        scheduleRefreshTimer();
+    refreshLibrary();
 }
 
 QString AuthManager::libraryCacheFilePath() const
 {
-    QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    if (base.isEmpty()) {
-        base = QDir::homePath() + "/AnimindQt";
-    }
-    QDir().mkpath(base);
-    return base + "/library_cache.json";
+    return dataDir() + QStringLiteral("/library_cache.json");
 }
 
-void AuthManager::persistLibraryCache(const QJsonArray& items) const
+void AuthManager::loadLibraryCache()
 {
+    QFile f(libraryCacheFilePath());
+    if (!f.exists() || !f.open(QIODevice::ReadOnly))
+        return;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject())
+        return;
+    const QJsonArray items = doc.object().value(QStringLiteral("items")).toArray();
+    QVariantList rows;
+    rows.reserve(items.size());
+    for (const auto& item : items) {
+        if (item.isObject())
+            rows.push_back(item.toObject().toVariantMap());
+    }
+    libraryShows_ = rows;
+    emit libraryShowsChanged();
+}
+
+void AuthManager::persistLibraryCache(const QVariantList& items) const
+{
+    QJsonArray array;
+    for (const auto& item : items)
+        array.append(QJsonValue::fromVariant(item));
+
     QJsonObject root;
-    root.insert("fetchedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
-    root.insert("count", items.size());
-    root.insert("items", items);
+    root.insert(QStringLiteral("fetchedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+    root.insert(QStringLiteral("count"), array.size());
+    root.insert(QStringLiteral("items"), array);
 
     QFile f(libraryCacheFilePath());
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return;
-    }
     f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
-void AuthManager::setSupabaseConfig(const QString& url, const QString& anonKey)
+void AuthManager::setLibrary(const QVariantList& rows)
 {
-    supabaseUrl_ = url.trimmed();
-    supabaseAnonKey_ = anonKey.trimmed();
-    while (supabaseUrl_.endsWith('/'))
-        supabaseUrl_.chop(1);
-}
-
-void AuthManager::syncLibraryFromServer()
-{
-    if (!hasSupabaseConfig()) {
-        qWarning() << "Library sync: ANIMIND_SUPABASE_URL / ANIMIND_SUPABASE_ANON_KEY not configured, skipping.";
-        return;
+    // Pages bind the flattened anime_data shape the old direct-database reads produced,
+    // so the row envelope is folded into the show object here and not in every page.
+    QVariantList flattened;
+    flattened.reserve(rows.size());
+    for (const auto& value : rows) {
+        const QVariantMap row = value.toMap();
+        QVariantMap item = row.value(QStringLiteral("anime_data")).toMap();
+        if (item.isEmpty())
+            item = row;
+        const QString status = row.value(QStringLiteral("status")).toString();
+        item.insert(QStringLiteral("userStatus"), status);
+        item.insert(QStringLiteral("status"), status);
+        if (!item.contains(QStringLiteral("anime_id")))
+            item.insert(QStringLiteral("anime_id"), row.value(QStringLiteral("anime_id")));
+        flattened.push_back(item);
     }
-    if (!authenticated() || accessToken_.isEmpty()) {
-        return;
-    }
-
-    const QString sbToken = getSupabaseToken();
-    if (sbToken.isEmpty()) {
-        qWarning() << "Library sync: could not obtain Supabase token, skipping.";
-        return;
-    }
-
-    // Call Supabase REST API: GET /rest/v1/watchlist?user_id=eq.<uid>&order=created_at.desc
-    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
-    QUrlQuery query;
-    query.addQueryItem("user_id", QString("eq.") + userId_);
-    query.addQueryItem("order", "created_at.desc");
-    query.addQueryItem("limit", "200");
-    url.setQuery(query);
-
-    QNetworkRequest req(url);
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
-
-    auto* reply = net_.get(req);
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "Library sync failed:" << reply->errorString();
-        reply->deleteLater();
-        return;
-    }
-
-    const auto doc = QJsonDocument::fromJson(reply->readAll());
-    reply->deleteLater();
-    if (!doc.isArray()) {
-        qWarning() << "Library sync failed: expected JSON array from Supabase";
-        return;
-    }
-
-    // Map Supabase rows -> {anime_data fields + userStatus: status}
-    const QJsonArray rows = doc.array();
-    QJsonArray items;
-    libraryShows_.clear();
-    libraryShows_.reserve(rows.size());
-    for (const auto& row : rows) {
-        if (!row.isObject()) continue;
-        const QJsonObject r = row.toObject();
-        QJsonObject animeData = r.value("anime_data").toObject();
-        animeData.insert("userStatus", r.value("status").toString());
-        animeData.insert("status", r.value("status").toString());
-        animeData.insert("anime_id", r.value("anime_id"));
-        libraryShows_.push_back(animeData.toVariantMap());
-        items.append(animeData);
-    }
-    persistLibraryCache(items);
+    libraryShows_ = flattened;
+    persistLibraryCache(flattened);
     emit libraryShowsChanged();
-    qInfo() << "Library sync complete. Items:" << rows.size();
 }
 
-QVariantMap AuthManager::getShowDetails(const QString& showId)
+void AuthManager::setLibraryLoading(bool loading)
 {
-    QVariantMap out;
-    if (showId.isEmpty()) {
-        return out;
-    }
-    if (!authenticated() && !refreshSessionToken()) {
-        return out;
-    }
-    if (accessToken_.isEmpty()) {
-        return out;
-    }
-
-    const QString encShowId = QString::fromUtf8(QUrl::toPercentEncoding(showId));
-    QUrl url(QString::fromUtf8(kDefaultBackendBaseUrl) + "/api/shows/" + encShowId);
-    QNetworkRequest req(url);
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("User-Agent", "Animind-Qt/1.0");
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(accessToken_).toUtf8());
-
-    auto* reply = net_.get(req);
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "Get show details failed:" << reply->errorString();
-        reply->deleteLater();
-        return out;
-    }
-
-    const auto doc = QJsonDocument::fromJson(reply->readAll());
-    reply->deleteLater();
-    if (!doc.isObject()) {
-        return out;
-    }
-    out = doc.object().toVariantMap();
-    return out;
+    if (libraryLoading_ == loading)
+        return;
+    libraryLoading_ = loading;
+    emit libraryLoadingChanged();
 }
 
-QVariantMap AuthManager::getStreamTicket(const QString& episodeId, int audioTrackIndex, const QString& clientType)
+void AuthManager::refreshLibrary()
 {
-    QVariantMap out;
-    if (episodeId.isEmpty()) {
-        return out;
-    }
-    if (!authenticated() && !refreshSessionToken()) {
-        return out;
-    }
-    if (accessToken_.isEmpty()) {
-        return out;
-    }
-
-    const QString encEpisodeId = QString::fromUtf8(QUrl::toPercentEncoding(episodeId));
-    QUrl url(QString::fromUtf8(kDefaultBackendBaseUrl) + "/api/episodes/" + encEpisodeId + "/stream-ticket");
-    QUrlQuery query;
-    query.addQueryItem("clientType", clientType.isEmpty() ? "native" : clientType);
-    if (audioTrackIndex >= 0) {
-        query.addQueryItem("at", QString::number(audioTrackIndex));
-    }
-    url.setQuery(query);
-
-    QNetworkRequest req(url);
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("User-Agent", "Animind-Qt/1.0");
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(accessToken_).toUtf8());
-
-    auto* reply = net_.get(req);
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "Get stream ticket failed:" << reply->errorString();
-        reply->deleteLater();
-        return out;
-    }
-
-    const auto doc = QJsonDocument::fromJson(reply->readAll());
-    reply->deleteLater();
-    if (!doc.isObject()) {
-        return out;
-    }
-
-    out = doc.object().toVariantMap();
-    const QString rawUrl = out.value("url").toString();
-    if (!rawUrl.isEmpty() && !rawUrl.startsWith("http", Qt::CaseInsensitive)) {
-        const QString base = QString::fromUtf8(kDefaultBackendBaseUrl);
-        out.insert("url", rawUrl.startsWith("/") ? (base + rawUrl) : (base + "/" + rawUrl));
-    }
-    return out;
-}
-
-bool AuthManager::refreshSessionToken()
-{
-    return refreshDesktopSession();
-}
-
-bool AuthManager::hydrateSessionFromClient()
-{
-    return false;
-}
-
-bool AuthManager::exchangeClerkTokenForDesktopSession(const QString& clerkToken, QString& outAccessToken, QString& outRefreshToken, QString& outSessionId, qint64& outExpMs)
-{
-    QNetworkRequest req(QUrl(QString::fromUtf8(kDefaultBackendBaseUrl) + "/api/auth/desktop/exchange"));
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("Content-Type", "application/json");
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(clerkToken).toUtf8());
-    const QByteArray body = QJsonDocument(QJsonObject{
-        {"deviceName", "Animind Qt Desktop"},
-        {"deviceId", QSysInfo::machineHostName()}
-    }).toJson(QJsonDocument::Compact);
-    auto* reply = net_.post(req, body);
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "Desktop exchange failed:" << reply->errorString();
-        reply->deleteLater();
-        return false;
-    }
-    const auto doc = QJsonDocument::fromJson(reply->readAll());
-    reply->deleteLater();
-    if (!doc.isObject()) return false;
-    const auto obj = doc.object();
-    outAccessToken = obj.value("access_token").toString();
-    outRefreshToken = obj.value("refresh_token").toString();
-    outSessionId = obj.value("session_id").toString();
-    if (obj.value("access_token_expires_at").isString()) {
-        outExpMs = QDateTime::fromString(obj.value("access_token_expires_at").toString(), Qt::ISODate).toMSecsSinceEpoch();
-    } else {
-        const qint64 expSec = static_cast<qint64>(obj.value("expires_in").toDouble(0));
-        outExpMs = expSec > 0 ? (QDateTime::currentMSecsSinceEpoch() + expSec * 1000) : 0;
-    }
-    return !outAccessToken.isEmpty() && !outRefreshToken.isEmpty() && outExpMs > 0;
-}
-
-bool AuthManager::refreshDesktopSession()
-{
-    if (refreshToken_.isEmpty()) return false;
-    QNetworkRequest req(QUrl(QString::fromUtf8(kDefaultBackendBaseUrl) + "/api/auth/desktop/refresh"));
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("Content-Type", "application/json");
-    const QByteArray body = QJsonDocument(QJsonObject{
-        {"refresh_token", refreshToken_}
-    }).toJson(QJsonDocument::Compact);
-    auto* reply = net_.post(req, body);
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-    if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "Desktop refresh failed:" << reply->errorString();
-        reply->deleteLater();
-        return false;
-    }
-    const auto doc = QJsonDocument::fromJson(reply->readAll());
-    reply->deleteLater();
-    if (!doc.isObject()) return false;
-    const auto obj = doc.object();
-    const QString newAccess = obj.value("access_token").toString();
-    const QString newRefresh = obj.value("refresh_token").toString();
-    const QString sid = obj.value("session_id").toString();
-    qint64 newExpMs = 0;
-    if (obj.value("access_token_expires_at").isString()) {
-        newExpMs = QDateTime::fromString(obj.value("access_token_expires_at").toString(), Qt::ISODate).toMSecsSinceEpoch();
-    } else {
-        const qint64 expSec = static_cast<qint64>(obj.value("expires_in").toDouble(0));
-        newExpMs = expSec > 0 ? (QDateTime::currentMSecsSinceEpoch() + expSec * 1000) : 0;
-    }
-    if (newAccess.isEmpty() || newRefresh.isEmpty() || newExpMs <= 0) return false;
-    accessToken_ = newAccess;
-    refreshToken_ = newRefresh;
-    if (!sid.isEmpty()) sessionId_ = sid;
-    expiresAtMs_ = newExpMs;
-    persistSession();
-    scheduleRefreshTimer();
-    emit sessionChanged();
-    return true;
-}
-
-void AuthManager::revokeDesktopSessionBestEffort()
-{
-    if (refreshToken_.isEmpty() && accessToken_.isEmpty()) return;
-    QNetworkRequest req(QUrl(QString::fromUtf8(kDefaultBackendBaseUrl) + "/api/auth/desktop/revoke"));
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("Content-Type", "application/json");
-    if (!accessToken_.isEmpty()) {
-        req.setRawHeader("Authorization", QString("Bearer %1").arg(accessToken_).toUtf8());
-    }
-    QJsonObject bodyObj;
-    if (!refreshToken_.isEmpty()) bodyObj.insert("refresh_token", refreshToken_);
-    auto* reply = net_.post(req, QJsonDocument(bodyObj).toJson(QJsonDocument::Compact));
-    QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-    reply->deleteLater();
-}
-
-void AuthManager::scheduleRefreshTimer()
-{
-    refreshTimer_.stop();
-    if (expiresAtMs_ <= 0) return;
-
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    // Refresh early to support very short-lived JWTs (e.g. ~60s).
-    qint64 msUntilRefresh = expiresAtMs_ - now - 30000;
-    if (msUntilRefresh < 15000) msUntilRefresh = 15000;
-    if (msUntilRefresh > INT_MAX) msUntilRefresh = INT_MAX;
-    refreshTimer_.start(static_cast<int>(msUntilRefresh));
+    if (!authenticated() || !api_)
+        return;
+    api_->setAccessToken(accessToken_);
+    setLibraryLoading(true);
+    api_->fetchWatchlist();
 }
 
 void AuthManager::addToLibrary(const QVariantMap& animeData)
 {
-    if (!hasSupabaseConfig()) {
-        lastError_ = "Watchlist sync is not configured on this device.";
-        emit lastErrorChanged();
+    if (!authenticated()) {
+        setError(QStringLiteral("Sign in to keep a list."));
         return;
     }
-    if (!authenticated()) return;
+    QString animeId = animeData.value(QStringLiteral("anilist_id")).toString();
+    if (animeId.isEmpty())
+        animeId = animeData.value(QStringLiteral("id")).toString();
+    if (animeId.isEmpty())
+        return;
 
-    QString animeId = animeData.value("anilist_id").toString();
-    if (animeId.isEmpty()) animeId = animeData.value("id").toString();
-    if (animeId.isEmpty()) return;
-
-    // Check already in local list
-    for (const auto& v : libraryShows_) {
-        const QVariantMap item = v.toMap();
-        if (item.value("anime_id").toString() == animeId || item.value("id").toString() == animeId) {
-            return; // already in list
-        }
+    for (const auto& value : libraryShows_) {
+        if (value.toMap().value(QStringLiteral("anime_id")).toString() == animeId)
+            return;
     }
 
-    // Optimistic local update
-    QVariantMap newItem = animeData;
-    newItem.insert("anime_id", animeId);
-    newItem.insert("anilist_id", animeId);
-    newItem.insert("userStatus", "Plan to Watch");
-    newItem.insert("status", "Plan to Watch");
-    libraryShows_.prepend(newItem);
+    QVariantMap optimistic = animeData;
+    optimistic.insert(QStringLiteral("anime_id"), animeId);
+    optimistic.insert(QStringLiteral("userStatus"), QStringLiteral("Plan to Watch"));
+    optimistic.insert(QStringLiteral("status"), QStringLiteral("Plan to Watch"));
+    libraryShows_.prepend(optimistic);
     emit libraryShowsChanged();
 
-    // Persist to Supabase
-    const QString sbToken = getSupabaseToken();
-    if (sbToken.isEmpty()) {
-        qWarning() << "addToLibrary: no Supabase token";
-        return;
-    }
-
-    // Build anime_data without userStatus
-    QJsonObject animeJson = QJsonObject::fromVariantMap(animeData);
-    animeJson.remove("userStatus");
-    animeJson.remove("status");
-
-    QJsonObject body;
-    body.insert("user_id", userId_);
-    body.insert("anime_id", animeId);
-    body.insert("anime_data", animeJson);
-    body.insert("status", QStringLiteral("Plan to Watch"));
-
-    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
-    QNetworkRequest req(url);
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("Content-Type", "application/json");
-    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
-    // Supabase upsert on conflict
-    req.setRawHeader("Prefer", "resolution=merge-duplicates");
-
-    auto* reply = net_.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
-    connect(reply, &QNetworkReply::finished, reply, [reply]() {
-        if (reply->error() != QNetworkReply::NoError) {
-            qWarning() << "addToLibrary Supabase failed:" << reply->errorString() << reply->readAll();
-        } else {
-            qDebug() << "addToLibrary: saved to Supabase";
-        }
-        reply->deleteLater();
-    });
+    QVariantMap payload = animeData;
+    payload.remove(QStringLiteral("userStatus"));
+    payload.remove(QStringLiteral("status"));
+    api_->setAccessToken(accessToken_);
+    api_->putWatchlist(animeId, payload, QStringLiteral("Plan to Watch"));
 }
 
 void AuthManager::updateShowStatus(const QString& showId, const QString& status)
 {
-    if (!hasSupabaseConfig())
+    if (!authenticated() || showId.isEmpty() || !api_)
         return;
-    // Optimistic local update
-    bool found = false;
+
     for (int i = 0; i < libraryShows_.size(); ++i) {
         QVariantMap item = libraryShows_[i].toMap();
-        if (item.value("anime_id").toString() == showId || item.value("anilist_id").toString() == showId || item.value("id").toString() == showId) {
-            item.insert("userStatus", status);
-            item.insert("status", status);
+        if (item.value(QStringLiteral("anime_id")).toString() == showId) {
+            item.insert(QStringLiteral("userStatus"), status);
+            item.insert(QStringLiteral("status"), status);
             libraryShows_[i] = item;
-            found = true;
+            emit libraryShowsChanged();
             break;
         }
     }
-    if (found) emit libraryShowsChanged();
 
-    // Persist to Supabase
-    const QString sbToken = getSupabaseToken();
-    if (sbToken.isEmpty()) {
-        qWarning() << "updateShowStatus: no Supabase token";
-        return;
-    }
-
-    QJsonObject body;
-    body.insert("status", status);
-
-    // PATCH /rest/v1/watchlist?user_id=eq.<uid>&anime_id=eq.<id>
-    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
-    QUrlQuery query;
-    query.addQueryItem("user_id", QString("eq.") + userId_);
-    query.addQueryItem("anime_id", QString("eq.") + showId);
-    url.setQuery(query);
-
-    QNetworkRequest req(url);
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("Content-Type", "application/json");
-    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
-
-    auto* reply = net_.sendCustomRequest(req, "PATCH", QJsonDocument(body).toJson(QJsonDocument::Compact));
-    connect(reply, &QNetworkReply::finished, reply, [reply, showId, status]() {
-        if (reply->error() != QNetworkReply::NoError) {
-            qWarning() << "updateShowStatus Supabase failed:" << reply->errorString() << reply->readAll();
-        } else {
-            qDebug() << "updateShowStatus: saved show" << showId << "to" << status;
-        }
-        reply->deleteLater();
-    });
+    api_->setAccessToken(accessToken_);
+    api_->patchWatchlistStatus(showId, status);
 }
 
 void AuthManager::removeShow(const QString& showId)
 {
-    if (!hasSupabaseConfig())
+    if (!authenticated() || showId.isEmpty() || !api_)
         return;
-    // Optimistic local update
-    int removeIdx = -1;
+
     for (int i = 0; i < libraryShows_.size(); ++i) {
-        QVariantMap item = libraryShows_[i].toMap();
-        if (item.value("anime_id").toString() == showId || item.value("anilist_id").toString() == showId || item.value("id").toString() == showId) {
-            removeIdx = i;
+        if (libraryShows_[i].toMap().value(QStringLiteral("anime_id")).toString() == showId) {
+            libraryShows_.removeAt(i);
+            emit libraryShowsChanged();
             break;
         }
     }
-    if (removeIdx >= 0) {
-        libraryShows_.removeAt(removeIdx);
-        emit libraryShowsChanged();
-    }
 
-    // Delete from Supabase
-    const QString sbToken = getSupabaseToken();
-    if (sbToken.isEmpty()) {
-        qWarning() << "removeShow: no Supabase token";
-        return;
-    }
-
-    // DELETE /rest/v1/watchlist?user_id=eq.<uid>&anime_id=eq.<id>
-    QUrl url(supabaseUrl_ + "/rest/v1/watchlist");
-    QUrlQuery query;
-    query.addQueryItem("user_id", QString("eq.") + userId_);
-    query.addQueryItem("anime_id", QString("eq.") + showId);
-    url.setQuery(query);
-
-    QNetworkRequest req(url);
-    req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("apikey", supabaseAnonKey_.toUtf8());
-    req.setRawHeader("Authorization", QString("Bearer %1").arg(sbToken).toUtf8());
-
-    auto* reply = net_.deleteResource(req);
-    connect(reply, &QNetworkReply::finished, reply, [reply, showId]() {
-        if (reply->error() != QNetworkReply::NoError) {
-            qWarning() << "removeShow Supabase failed:" << reply->errorString() << reply->readAll();
-        } else {
-            qDebug() << "removeShow: deleted show" << showId << "from Supabase";
-        }
-        reply->deleteLater();
-    });
-}
-
-QString AuthManager::getSupabaseToken()
-{
-    // Return cached token if still valid (with 30s margin)
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!supabaseToken_.isEmpty() && supabaseTokenExpiresMs_ > now + 30000) {
-        return supabaseToken_;
-    }
-
-    if (accessToken_.isEmpty() || sessionId_.isEmpty()) return QString();
-
-    // Call Clerk FAPI to get a Supabase-compatible JWT using the 'supabase' template.
-    // Endpoint: POST /v1/client/sessions/{session_id}/tokens/supabase
-    // This mirrors what the web frontend does: getToken({ template: 'supabase' })
-    const QString clerkFapi = QStringLiteral("https://clerk.fnxdoom.in");
-    const QString clerkUrl = clerkFapi + "/v1/client/sessions/" + sessionId_ + "/tokens/supabase";
-
-    QUrl clerkQUrl(clerkUrl);
-    QNetworkRequest clerkReq(clerkQUrl);
-    clerkReq.setRawHeader("Accept", "application/json");
-    clerkReq.setRawHeader("Authorization", QString("Bearer %1").arg(accessToken_).toUtf8());
-    clerkReq.setRawHeader("Content-Type", "application/x-www-form-urlencoded");
-
-    // POST with empty body
-    auto* clerkReply = net_.post(clerkReq, QByteArray());
-    QEventLoop loop;
-    connect(clerkReply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-
-    if (clerkReply->error() != QNetworkReply::NoError) {
-        qWarning() << "getSupabaseToken: Clerk FAPI request failed:" << clerkReply->errorString() << clerkReply->readAll();
-        clerkReply->deleteLater();
-        return QString();
-    }
-
-    const auto doc = QJsonDocument::fromJson(clerkReply->readAll());
-    clerkReply->deleteLater();
-    if (!doc.isObject()) return QString();
-
-    // Clerk returns { "jwt": "<token>" }
-    const QString token = doc.object().value("jwt").toString();
-    if (token.isEmpty()) {
-        qWarning() << "getSupabaseToken: no jwt field in Clerk response";
-        return QString();
-    }
-
-    supabaseToken_ = token;
-    // Decode expiry from JWT payload
-    const QStringList parts = token.split('.');
-    if (parts.size() >= 2) {
-        QByteArray b64 = parts.at(1).toUtf8();
-        b64.replace('-', '+');
-        b64.replace('_', '/');
-        while (b64.size() % 4 != 0) b64.append('=');
-        const QByteArray payload = QByteArray::fromBase64(b64);
-        const qint64 expSec = extractJsonNumber(payload, "exp");
-        supabaseTokenExpiresMs_ = expSec > 0 ? expSec * 1000 : (now + 3600000);
-    } else {
-        supabaseTokenExpiresMs_ = now + 3600000;
-    }
-
-    qDebug() << "getSupabaseToken: obtained Supabase JWT from Clerk, expires in"
-             << ((supabaseTokenExpiresMs_ - now) / 1000) << "seconds";
-    return supabaseToken_;
+    api_->setAccessToken(accessToken_);
+    api_->deleteWatchlist(showId);
 }
