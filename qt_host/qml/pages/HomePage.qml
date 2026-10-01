@@ -11,7 +11,7 @@ import ".."
 // repeated here because this page is also loaded standalone.
 Rectangle {
     id: homePage
-    color: "#0a0a0a"
+    color: Theme.bg
 
     property var  trendingList:  []
     property var  simulcastList: []

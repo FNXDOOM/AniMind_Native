@@ -21,18 +21,13 @@ Rectangle {
     signal closeRequested()
 
     // ── Design tokens ─────────────────────────────────────────────────────
-    readonly property color clrPrimary:            Theme.textPrimary
-    readonly property color clrMuted:              Theme.textSecondary
-    readonly property color clrOnSurface:          Theme.textPrimary
-    readonly property color clrBorder:             Theme.borderDefault
-
     // ── Geometry ──────────────────────────────────────────────────────────
     width:  Math.max(280, contentColumn.implicitWidth + 32)
     height: contentColumn.implicitHeight + 32
 
     // ── Visual style ──────────────────────────────────────────────────────
     color:        Qt.rgba(0.075, 0.075, 0.075, 0.82)
-    border.color: notificationPanel.clrBorder
+    border.color: Theme.borderDefault
     border.width: 1
     radius:       12
 
@@ -55,7 +50,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.bottomMargin: 12
             text: "Notifications"
-            color: notificationPanel.clrPrimary
+            color: Theme.textPrimary
             font {
                 family: Theme.displayFont
                 pixelSize: 14
@@ -80,7 +75,7 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 text:            "No new notifications"
-                color:           notificationPanel.clrOnSurface
+                color:           Theme.textPrimary
                 horizontalAlignment: Text.AlignHCenter
                 font {
                     family: Theme.bodyFont
@@ -92,7 +87,7 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 text:            "You're all caught up!"
-                color:           notificationPanel.clrMuted
+                color:           Theme.textSecondary
                 horizontalAlignment: Text.AlignHCenter
                 font {
                     family: Theme.bodyFont
@@ -110,7 +105,7 @@ Rectangle {
             delegate: Text {
                 Layout.fillWidth: true
                 text:  modelData.message || ""
-                color: notificationPanel.clrOnSurface
+                color: Theme.textPrimary
                 font {
                     family: Theme.bodyFont
                     pixelSize: 13

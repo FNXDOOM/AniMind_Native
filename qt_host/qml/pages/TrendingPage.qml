@@ -6,7 +6,7 @@ import ".."
 
 Rectangle {
     id: trendingPage
-    color: "#0a0a0a"
+    color: Theme.bg
 
     property var trendingList: []
     property bool loading: false
@@ -41,7 +41,7 @@ Rectangle {
 
         Text {
             text: "Trending Now"
-            color: "white"
+            color: Theme.textPrimary
             font.family: Theme.displayFont
             font.pixelSize: 26
             font.bold: true

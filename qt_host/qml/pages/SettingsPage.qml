@@ -109,7 +109,7 @@ Rectangle {
                                 width: 18; height: 18; radius: 9
                                 anchors.verticalCenter: parent.verticalCenter
                                 x: railSw.on ? parent.width - width - 3 : 3
-                                color: "#ffffff"
+                                color: Theme.textPrimary
                                 Behavior on x {
                                     NumberAnimation { duration: Theme.dFast
                                                       easing.type: Theme.easeOutCubic }
@@ -166,7 +166,7 @@ Rectangle {
                                 width: 18; height: 18; radius: 9
                                 anchors.verticalCenter: parent.verticalCenter
                                 x: motionSw.on ? parent.width - width - 3 : 3
-                                color: "#ffffff"
+                                color: Theme.textPrimary
                                 Behavior on x {
                                     NumberAnimation { duration: Theme.dFast
                                                       easing.type: Theme.easeOutCubic }

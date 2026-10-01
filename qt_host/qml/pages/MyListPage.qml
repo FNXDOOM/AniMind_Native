@@ -230,7 +230,7 @@ Item {
 
                     color: myListPage.clrOnSurface
                     selectionColor: myListPage.clrPrimary
-                    selectedTextColor: "#ffffff"
+                    selectedTextColor: Theme.textPrimary
 
                     background: Rectangle {
                         color: "#1a1919"

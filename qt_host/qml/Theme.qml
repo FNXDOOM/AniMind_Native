@@ -37,6 +37,22 @@ QtObject {
 
     readonly property color danger:        "#E50914"
     readonly property color success:       "#2ECC71"
+    // In-progress states need their own step: accent and danger are the same red, so a
+    // buffering peer would otherwise be indistinguishable from a stalled one.
+    readonly property color warning:       "#F5A524"
+    readonly property color warningSoft:   Qt.rgba(0.961, 0.647, 0.141, 0.16)
+
+    // ── Player chrome ────────────────────────────────────────────────────
+    // The chrome sits on top of video, so its steps are translucent whites over black
+    // rather than the surface ramp the rest of the app uses. Each value is exactly what
+    // the chrome hardcoded before these names existed.
+    readonly property color chromeText:    "#FFFFFF"
+    readonly property color chromeTextDim: "#BBBBBB"
+    readonly property color chromeRest:    "#22FFFFFF"
+    readonly property color chromeHover:   "#33FFFFFF"
+    readonly property color chromeEdge:    "#55FFFFFF"
+    readonly property color chromeButton:  "#14000000"
+    readonly property color chromeRadio:   "#555555"
 
     // Translucent scrim behind dialogs and the player chrome.
     readonly property color veil:          Qt.rgba(0, 0, 0, 0.72)
@@ -78,6 +94,7 @@ QtObject {
     readonly property int s4: 16
     readonly property int s5: 20
     readonly property int s6: 24
+    readonly property int s7: 28
     readonly property int s8: 32
     readonly property int s10: 40
     readonly property int s12: 48

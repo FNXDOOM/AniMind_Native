@@ -19,7 +19,7 @@ Rectangle {
     radius: Theme.rMd
     color: !enabled ? "#2a2f36"
            : btn.pressed ? Theme.textSecondary
-           : btn.hovered ? "#ffffff"
+           : btn.hovered ? Theme.textPrimary
            : Theme.textPrimary
     border.width: 0
     opacity: enabled ? 1.0 : 0.55
@@ -45,13 +45,13 @@ Rectangle {
             text: btn.glyph
             font.family: Theme.iconFont
             font.pixelSize: btn.textSize
-            color: "#07090C"
+            color: Theme.bg
         }
         Text {
             anchors.verticalCenter: parent.verticalCenter
             visible: btn.text.length > 0
             text: btn.text
-            color: "#07090C"
+            color: Theme.bg
             font.family: Theme.bodyFont
             font.pixelSize: btn.textSize
             font.weight: Font.DemiBold

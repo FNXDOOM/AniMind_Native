@@ -10,7 +10,7 @@ import ".."
 // used three combo boxes whose labels disagreed with the query they issued.
 Rectangle {
     id: browsePage
-    color: "#0a0a0a"
+    color: Theme.bg
 
     property string genre: "All"
     property var    results: []
@@ -85,7 +85,7 @@ Rectangle {
 
         Text {
             text: "Browse"
-            color: "#ffffff"
+            color: Theme.textPrimary
             font.family: browsePage.displayFont
             font.pixelSize: 28
             font.weight: Font.Bold
@@ -147,7 +147,7 @@ Rectangle {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: browsePage.genre === "All" ? "Popular now" : browsePage.genre
-                color: "#ffffff"
+                color: Theme.textPrimary
                 font.family: browsePage.displayFont
                 font.pixelSize: 17
                 font.weight: Font.DemiBold
@@ -166,7 +166,7 @@ Rectangle {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: browsePage.expanded ? "Show fewer" : "View all"
-                        color: viewAllMa.containsMouse ? "#ffffff" : "#8a8a8a"
+                        color: viewAllMa.containsMouse ? Theme.textPrimary : "#8a8a8a"
                         font.family: browsePage.bodyFont
                         font.pixelSize: 13
                         Behavior on color { ColorAnimation { duration: 130 } }
@@ -174,7 +174,7 @@ Rectangle {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: "\uE76C"
-                        color: viewAllMa.containsMouse ? "#ffffff" : "#8a8a8a"
+                        color: viewAllMa.containsMouse ? Theme.textPrimary : "#8a8a8a"
                         font.family: browsePage.iconFont
                         font.pixelSize: 11
                     }
@@ -287,7 +287,7 @@ Rectangle {
                 id: browseRetryTxt
                 anchors.centerIn: parent
                 text: browsePage.errorMsg !== "" ? "Try again" : "Browse all titles"
-                color: "#ffffff"
+                color: Theme.textPrimary
                 font.family: browsePage.bodyFont
                 font.pixelSize: 13
             }

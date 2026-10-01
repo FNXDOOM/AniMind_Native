@@ -119,7 +119,7 @@ Item {
                     height: 30
                     radius: Theme.rSm
                     color: watchMa.pressed ? Theme.textSecondary
-                         : (watchMa.containsMouse ? "#ffffff" : Theme.textPrimary)
+                         : (watchMa.containsMouse ? Theme.textPrimary : Theme.textPrimary)
                     Behavior on color { ColorAnimation { duration: Theme.dFast } }
                     Text {
                         anchors.centerIn: parent
@@ -251,7 +251,7 @@ Item {
                 id: epTxt
                 anchors.centerIn: parent
                 text: card.epText
-                color: isFresh ? Theme.textPrimary : Theme.textSecondary
+                color: epChip.isFresh ? Theme.textPrimary : Theme.textSecondary
                 font.family: Theme.bodyFont
                 font.pixelSize: Theme.tsSmall; font.weight: Font.Bold; font.letterSpacing: Theme.trackingWide
             }
