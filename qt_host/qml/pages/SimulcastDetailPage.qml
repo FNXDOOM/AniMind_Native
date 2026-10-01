@@ -16,7 +16,10 @@ Rectangle {
     property string errorMsg: ""
 
     signal backRequested()
-    signal playEpisodeRequested(string streamUrl, string title, string episodeLabel)
+    signal playEpisodeRequested(string streamUrl, string title, string episodeLabel, string episodeId)
+
+    property string pendingEpisodeId: ""
+    property var pendingEpisode: ({})
 
     function loadShow() {
         if (!showId || showId.length === 0) return
@@ -24,24 +27,57 @@ Rectangle {
         errorMsg = ""
         showDetail = {}
         episodes = []
-        var payload = authManager ? authManager.getShowDetails(showId) : ({})
-        if (!payload || Object.keys(payload).length === 0) {
-            loading = false
-            errorMsg = "Failed to load show details from server."
-            return
-        }
-        showDetail = payload
-        episodes = payload.episodes || []
-        loading = false
+        api.fetchShow(showId)
     }
 
     function playEpisode(modelData, idx) {
         var epId = String(modelData.id || "")
-        if (!epId || !authManager) return
-        var ticket = authManager.getStreamTicket(epId, -1, "native")
-        if (!ticket || !ticket.url) return
-        var epNum = String(modelData.episode_number !== undefined ? modelData.episode_number : (idx + 1))
-        playEpisodeRequested(ticket.url, showDetail.title || showTitle || "Show", "Episode " + epNum)
+        if (!epId) return
+        if (!authManager || !authManager.authenticated) {
+            errorMsg = "Sign in to stream this show."
+            return
+        }
+        pendingEpisodeId = epId
+        pendingEpisode = modelData
+        // The ticket URL is self-authenticating: mpv fetches it with no headers,
+        // so the ticket has to be fresh by the time playback starts.
+        api.fetchStreamTicket(epId, "native")
+    }
+
+    Connections {
+        target: api
+        function onShowLoaded(id, show) {
+            if (id !== page.showId) return
+            page.showDetail = show
+            page.episodes = show.episodes || []
+            page.loading = false
+        }
+        function onStreamTicketLoaded(id, ticket) {
+            if (id !== page.pendingEpisodeId) return
+            var modelData = page.pendingEpisode
+            page.pendingEpisodeId = ""
+            page.pendingEpisode = ({})
+            if (!ticket || !ticket.url) {
+                page.errorMsg = "The server returned no stream for this episode."
+                return
+            }
+            var epNum = String(modelData.episode_number !== undefined ? modelData.episode_number : 1)
+            page.playEpisodeRequested(ticket.url,
+                                      page.showDetail.title || page.showTitle || "Show",
+                                      "Episode " + epNum,
+                                      id)
+        }
+        function onRequestFailed(endpoint, status, message) {
+            if (endpoint === "show" && page.loading) {
+                page.loading = false
+                page.errorMsg = message && message.length
+                    ? message
+                    : "Failed to load show details from the server."
+            } else if (endpoint === "stream-ticket") {
+                page.pendingEpisodeId = ""
+                page.errorMsg = message && message.length ? message : "Could not start this episode."
+            }
+        }
     }
 
     onShowIdChanged: loadShow()
@@ -113,7 +149,7 @@ Rectangle {
 
                     Text {
                         text: (showDetail.title || showTitle || "Show").toUpperCase()
-                        color: "white"
+                        color: Theme.textPrimary
                         font.family: Theme.displayFont
                         font.pixelSize: 48 * page.s
                         font.weight: Font.Black
@@ -262,7 +298,7 @@ Rectangle {
                                 Text {
                                     anchors.centerIn: parent
                                     text: "\u25b6"
-                                    color: "white"
+                                    color: Theme.textPrimary
                                     font.pixelSize: 42 * page.s
                                 }
                             }
@@ -277,7 +313,7 @@ Rectangle {
                                     id: durText
                                     anchors.centerIn: parent
                                     text: modelData.duration && String(modelData.duration).length > 0 ? String(modelData.duration) : "23m"
-                                    color: "white"
+                                    color: Theme.textPrimary
                                     font.pixelSize: 18 * page.s
                                     font.bold: true
                                 }
@@ -300,7 +336,7 @@ Rectangle {
                             text: "E" + String(modelData.episode_number !== undefined ? modelData.episode_number : (index + 1))
                                   + " \u2013 "
                                   + (modelData.title || ("Episode " + String(index + 1)))
-                            color: "white"
+                            color: Theme.textPrimary
                             font.family: Theme.displayFont
                             font.pixelSize: 16 * page.s
                             font.bold: true

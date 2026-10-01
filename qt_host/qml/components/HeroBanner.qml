@@ -106,7 +106,7 @@ Item {
                 id: heroPulse
                 anchors.centerIn: parent
                 width: 40; height: 40; radius: 20
-                color: "transparent"; border.color: "#ffffff"; border.width: 2
+                color: "transparent"; border.color: Theme.textPrimary; border.width: 2
                 visible: loadingHero && heroMedia === null
                 SequentialAnimation on opacity {
                     running: heroPulse.visible && !banner.calm
@@ -158,7 +158,7 @@ Item {
                 Text {
                     width: parent.width
                     text: heroMedia ? AniListApi.title(heroMedia) : ""
-                    color: "#ffffff"
+                    color: Theme.textPrimary
                     font.family: Theme.displayFont
                     font.pixelSize: banner.heroSize
                     font.weight: Font.Bold
@@ -202,7 +202,7 @@ Item {
                     Text {
                         visible: banner.media ? AniListApi.score(banner.media) !== "" : false
                         text: "\u2605 " + (heroMedia ? AniListApi.score(heroMedia) : "")
-                        color: "#ffffff"
+                        color: Theme.textPrimary
                         font.family: Theme.displayFont
                         font.pixelSize: 15; font.weight: Font.Bold; font.letterSpacing: 1.0
                     }
@@ -233,7 +233,7 @@ Item {
                         Rectangle {
                             id: tallyDot
                             width: 7; height: 7; radius: 4
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             anchors.verticalCenter: parent.verticalCenter
                             SequentialAnimation on scale {
                                 running: tallyChip.visible && !banner.calm
@@ -255,7 +255,7 @@ Item {
                                 banner.tallyStamp
                                 return banner.media ? banner.tallyFor(banner.media) : ""
                             }
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.family: Theme.displayFont
                             font.pixelSize: 14
                             font.weight: Font.DemiBold
@@ -287,9 +287,18 @@ Item {
                     spacing: 10
 
                     Rectangle {
+                        id: heroPlay
+                        function activate() {
+                            if (heroMedia) playRequested(heroMedia.id, AniListApi.title(heroMedia))
+                        }
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Play"
+                        Accessible.onPressAction: activate()
+
                         width: Math.max(150, watchTxt.implicitWidth + 40); height: 44
                         radius: 5
-                        color: _wma.pressed ? "#d9d9d9" : _wma.containsMouse ? "#ffffff" : "#f5f5f5"
+                        color: _wma.pressed ? "#d9d9d9" : _wma.containsMouse ? Theme.textPrimary : "#f5f5f5"
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Text {
                             id: watchTxt
@@ -299,16 +308,35 @@ Item {
                             font.family: Theme.displayFont
                             font.pixelSize: 14; font.weight: Font.DemiBold; font.letterSpacing: 0
                         }
+                        Keys.onReturnPressed: activate()
+                        Keys.onSpacePressed:  activate()
+                        // Outside the pill: a ring drawn inside would vanish against the
+                        // button's own white fill.
+                        Rectangle {
+                            anchors { fill: parent; margins: -3 }
+                            radius: 8
+                            color: "transparent"
+                            border.color: Theme.textPrimary
+                            border.width: 2
+                            visible: heroPlay.activeFocus
+                        }
                         MouseArea {
                             id: _wma
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: if (heroMedia) playRequested(heroMedia.id, AniListApi.title(heroMedia))
+                            onClicked: heroPlay.activate()
                         }
                     }
 
                     Rectangle {
+                        id: heroInfo
+                        function activate() { if (heroMedia) seriesClicked(heroMedia.id) }
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "More info"
+                        Accessible.onPressAction: activate()
+
                         width: Math.max(120, infoTxt.implicitWidth + 32); height: 44
                         radius: 5
                         color: _ima.containsMouse ? Qt.rgba(1,1,1,0.12) : Qt.rgba(1,1,1,0.06)
@@ -318,16 +346,26 @@ Item {
                             id: infoTxt
                             anchors.centerIn: parent
                             text: "More Info"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.family: Theme.displayFont
                             font.pixelSize: 14; font.weight: Font.Bold; font.letterSpacing: 1.8
+                        }
+                        Keys.onReturnPressed: activate()
+                        Keys.onSpacePressed:  activate()
+                        Rectangle {
+                            anchors { fill: parent; margins: -3 }
+                            radius: 8
+                            color: "transparent"
+                            border.color: Theme.textPrimary
+                            border.width: 2
+                            visible: heroInfo.activeFocus
                         }
                         MouseArea {
                             id: _ima
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: if (heroMedia) seriesClicked(heroMedia.id)
+                            onClicked: heroInfo.activate()
                         }
                     }
                 }

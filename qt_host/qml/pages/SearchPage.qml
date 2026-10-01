@@ -12,7 +12,7 @@ import ".."
 // promise a multi-select the API cannot honour.
 Rectangle {
     id: searchPage
-    color: "#0a0a0a"
+    color: Theme.bg
 
     property string initialQuery: ""
     property string query: ""
@@ -157,7 +157,7 @@ Rectangle {
             text: searchPage.query.length >= 2
                   ? "Search results for \u201C" + searchPage.query + "\u201D"
                   : (searchPage.hasFilters ? "Filtered results" : "Search anime")
-            color: "#ffffff"
+            color: Theme.textPrimary
             font.family: searchPage.displayFont
             font.pixelSize: 24
             font.weight: Font.Bold
@@ -182,14 +182,14 @@ Rectangle {
                         id: tl
                         anchors { left: parent.left; bottom: parent.bottom; bottomMargin: 6 }
                         text: modelData.l
-                        color: t.on ? "#ffffff" : "#8a8a8a"
+                        color: t.on ? Theme.textPrimary : "#8a8a8a"
                         font.family: searchPage.bodyFont
                         font.pixelSize: 13
                         font.weight: t.on ? Font.DemiBold : Font.Normal
                     }
                     Rectangle {
                         anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-                        height: 2; radius: 1; color: "#ffffff"; visible: t.on
+                        height: 2; radius: 1; color: Theme.textPrimary; visible: t.on
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -312,7 +312,7 @@ Rectangle {
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: modelData.label
-                                    color: filterOpt.on ? "#ffffff" : "#b3b3b3"
+                                    color: filterOpt.on ? Theme.textPrimary : "#b3b3b3"
                                     font.family: searchPage.bodyFont
                                     font.pixelSize: 13
                                 }
@@ -375,7 +375,7 @@ Rectangle {
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: modelData === 0 ? "Any year" : String(modelData)
-                                        color: yearOpt.on ? "#ffffff" : "#b3b3b3"
+                                        color: yearOpt.on ? Theme.textPrimary : "#b3b3b3"
                                         font.family: searchPage.bodyFont
                                         font.pixelSize: 13
                                     }
@@ -402,7 +402,7 @@ Rectangle {
                 Text {
                     anchors.centerIn: parent
                     text: "Reset"
-                    color: "#ffffff"
+                    color: Theme.textPrimary
                     font.family: searchPage.bodyFont
                     font.pixelSize: 13
                 }
@@ -487,7 +487,7 @@ Rectangle {
                                 id: rowTitle
                                 width: parent.width
                                 text: AniListApi.title(modelData)
-                                color: "#ffffff"
+                                color: Theme.textPrimary
                                 font.family: searchPage.bodyFont
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
@@ -561,7 +561,7 @@ Rectangle {
                             Text {
                                 width: parent.width
                                 text: modelData && modelData.name ? modelData.name.full : ""
-                                color: "#ffffff"
+                                color: Theme.textPrimary
                                 font.family: searchPage.bodyFont
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
@@ -625,7 +625,7 @@ Rectangle {
             id: searchInput
             anchors { fill: parent; leftMargin: 14; rightMargin: 14; verticalCenter: parent.verticalCenter }
             verticalAlignment: TextInput.AlignVCenter
-            color: "#ffffff"
+            color: Theme.textPrimary
             font.family: searchPage.bodyFont
             font.pixelSize: 13
             cursorVisible: true
@@ -731,7 +731,7 @@ Rectangle {
                 id: sRetryTxt
                 anchors.centerIn: parent
                 text: "Clear filters"
-                color: "#ffffff"
+                color: Theme.textPrimary
                 font.family: searchPage.bodyFont
                 font.pixelSize: 13
             }

@@ -217,22 +217,35 @@ Item {
                     }
                 }
 
+                // One activation path for tap, Enter, Space and screen readers; the three
+                // copies of this call had already started to drift.
+                function play() {
+                    if (!playable) return
+                    sidebar.episodePicked(modelData.url, sidebar.seriesTitle,
+                                           "Episode " + (index + 1), modelData.thumbnail || "")
+                }
+
+                activeFocusOnTab: playable
+
                 HoverHandler { id: epHover; cursorShape: ep.playable ? Qt.PointingHandCursor : Qt.ArrowCursor }
-                TapHandler {
-                    enabled: ep.playable
-                    onTapped: sidebar.episodePicked(ep.modelData.url,
-                                                    sidebar.seriesTitle,
-                                                    "Episode " + (ep.index + 1),
-                                                    ep.modelData.thumbnail || "")
+                TapHandler { onTapped: ep.play() }
+                Keys.onReturnPressed: ep.play()
+                Keys.onSpacePressed:  ep.play()
+
+                // Inset ring: the current row already carries an accent border, so the
+                // keyboard ring has to read differently or the two are confusable.
+                Rectangle {
+                    anchors { fill: parent; margins: 2 }
+                    radius: Theme.rMd
+                    color: "transparent"
+                    border.color: Theme.textPrimary
+                    border.width: 2
+                    visible: ep.activeFocus
                 }
 
                 Accessible.role: Accessible.Button
                 Accessible.name: "Episode " + (ep.index + 1) + ": " + ep.name
-                Accessible.onPressAction: {
-                    if (ep.playable)
-                        sidebar.episodePicked(ep.modelData.url, sidebar.seriesTitle,
-                                              "Episode " + (ep.index + 1), ep.modelData.thumbnail || "")
-                }
+                Accessible.onPressAction: ep.play()
             }
         }
     }

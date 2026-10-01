@@ -12,7 +12,7 @@ import ".."
 // Episodes / Details / More like this. Values mirror the tokens in main.qml.
 Rectangle {
     id: detailPage
-    color: "#0a0a0a"
+    color: Theme.bg
 
     property int seriesId: 0
     property var detail: null
@@ -242,7 +242,7 @@ Rectangle {
                         orientation: Gradient.Vertical
                         GradientStop { position: 0.00; color: Qt.rgba(0.04, 0.04, 0.04, 0.55) }
                         GradientStop { position: 0.35; color: "transparent" }
-                        GradientStop { position: 1.00; color: "#0a0a0a" }
+                        GradientStop { position: 1.00; color: Theme.bg }
                     }
                 }
             }
@@ -391,7 +391,7 @@ Rectangle {
                     anchors.fill: parent
                     radius: 17
                     color: backMa.containsMouse ? "#242424" : Qt.rgba(0, 0, 0, 0.5)
-                    border.color: backBtn.activeFocus ? "#ffffff" : "#3a3a3a"
+                    border.color: backBtn.activeFocus ? Theme.textPrimary : "#3a3a3a"
                     border.width: backBtn.activeFocus ? 2 : 1
                 }
                 Row {
@@ -400,12 +400,12 @@ Rectangle {
                     spacing: 7
                     Text {
                         text: "\uE76B"
-                        color: "#ffffff"; font.family: detailPage.iconFont; font.pixelSize: 12
+                        color: Theme.textPrimary; font.family: detailPage.iconFont; font.pixelSize: 12
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
                         text: "Back"
-                        color: "#ffffff"; font.family: detailPage.bodyFont; font.pixelSize: 13
+                        color: Theme.textPrimary; font.family: detailPage.bodyFont; font.pixelSize: 13
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -457,7 +457,7 @@ Rectangle {
                 Text {
                     width: parent.width
                     text: detailPage.detail ? AniListApi.title(detailPage.detail) : ""
-                    color: "#ffffff"
+                    color: Theme.textPrimary
                     font.family: detailPage.displayFont
                     font.pixelSize: detailPage.titleSize
                     font.weight: Font.Bold
@@ -514,7 +514,7 @@ Rectangle {
                         spacing: 8
                         Rectangle {
                             width: 7; height: 7; radius: 4
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             anchors.verticalCenter: parent.verticalCenter
                             SequentialAnimation on opacity {
                                 running: tallyChip.visible && !detailPage.calm
@@ -526,7 +526,7 @@ Rectangle {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: detailPage.tallyText
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.family: detailPage.displayFont
                             font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 1.2
                         }
@@ -543,15 +543,15 @@ Rectangle {
                         width: Math.max(116, watchTxt.implicitWidth + 36)
                         height: 42; radius: 8
                         activeFocusOnTab: true
-                        color: watchMa.pressed ? "#d9d9d9" : watchMa.containsMouse ? "#ffffff" : "#f5f5f5"
-                        border.color: watchBtn.activeFocus ? "#ffffff" : "transparent"
+                        color: watchMa.pressed ? "#d9d9d9" : watchMa.containsMouse ? Theme.textPrimary : "#f5f5f5"
+                        border.color: watchBtn.activeFocus ? Theme.textPrimary : "transparent"
                         border.width: watchBtn.activeFocus ? 2 : 0
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Text {
                             id: watchTxt
                             anchors.centerIn: parent
                             text: "\u25B6   Play"
-                            color: "#0a0a0a"
+                            color: Theme.bg
                             font.family: detailPage.bodyFont
                             font.pixelSize: 14; font.weight: Font.DemiBold
                         }
@@ -580,14 +580,14 @@ Rectangle {
                         height: 42; radius: 8
                         activeFocusOnTab: true
                         color: addMa.containsMouse ? "#222222" : "#181818"
-                        border.color: addBtn.activeFocus ? "#ffffff" : "#2e2e2e"
+                        border.color: addBtn.activeFocus ? Theme.textPrimary : "#2e2e2e"
                         border.width: 1
                         Behavior on color { ColorAnimation { duration: 120 } }
                         Text {
                             id: addTxt
                             anchors.centerIn: parent
                             text: "+   My List"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.family: detailPage.bodyFont
                             font.pixelSize: 14; font.weight: Font.DemiBold
                         }
@@ -609,13 +609,13 @@ Rectangle {
                         height: 42; radius: 8
                         activeFocusOnTab: true
                         color: trailerMa.containsMouse ? "#222222" : "#181818"
-                        border.color: trailerBtn.activeFocus ? "#ffffff" : "#2e2e2e"
+                        border.color: trailerBtn.activeFocus ? Theme.textPrimary : "#2e2e2e"
                         border.width: 1
                         Text {
                             id: trailerTxt
                             anchors.centerIn: parent
                             text: "Trailer"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.family: detailPage.bodyFont
                             font.pixelSize: 14; font.weight: Font.DemiBold
                         }
@@ -686,7 +686,7 @@ Rectangle {
                                 id: tabLabel
                                 anchors { left: parent.left; bottom: parent.bottom; bottomMargin: 9 }
                                 text: modelData.label
-                                color: tabItem.isOn ? "#ffffff" : (tabMa.containsMouse ? "#cfcfcf" : "#8a8a8a")
+                                color: tabItem.isOn ? Theme.textPrimary : (tabMa.containsMouse ? "#cfcfcf" : "#8a8a8a")
                                 font.family: detailPage.bodyFont
                                 font.pixelSize: 14
                                 font.weight: tabItem.isOn ? Font.DemiBold : Font.Normal
@@ -788,7 +788,7 @@ Rectangle {
                                         width: 220; height: 124
                                         radius: 8
                                         color: "#141414"
-                                        border.color: epCard.activeFocus ? "#ffffff" : "#242424"
+                                        border.color: epCard.activeFocus ? Theme.textPrimary : "#242424"
                                         border.width: epCard.activeFocus ? 2 : 1
                                         clip: true
                                         Image {
@@ -806,13 +806,13 @@ Rectangle {
                                             anchors.centerIn: parent
                                             width: 38; height: 38; radius: 19
                                             color: Qt.rgba(0, 0, 0, 0.6)
-                                            border.color: "#ffffff"; border.width: 1
+                                            border.color: Theme.textPrimary; border.width: 1
                                             opacity: epMa.containsMouse ? 1 : 0.75
                                             Text {
                                                 anchors.centerIn: parent
                                                 anchors.horizontalCenterOffset: 1
                                                 text: "\u25B6"
-                                                color: "#ffffff"; font.pixelSize: 13
+                                                color: Theme.textPrimary; font.pixelSize: 13
                                             }
                                         }
                                     }
@@ -914,7 +914,7 @@ Rectangle {
                                         }
                                         Text {
                                             text: modelData.value
-                                            color: "#ffffff"
+                                            color: Theme.textPrimary
                                             font.family: detailPage.displayFont
                                             font.pixelSize: 16; font.weight: Font.DemiBold
                                         }
@@ -930,7 +930,7 @@ Rectangle {
                         visible: synopsisTxt.text.length > 0
                         Text {
                             text: "Synopsis"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.family: detailPage.displayFont
                             font.pixelSize: 18; font.weight: Font.DemiBold
                         }
@@ -979,7 +979,7 @@ Rectangle {
                         visible: detailPage.characterList(detailPage.detail).length > 0
                         Text {
                             text: "Main characters"
-                            color: "#ffffff"
+                            color: Theme.textPrimary
                             font.family: detailPage.displayFont
                             font.pixelSize: 18; font.weight: Font.DemiBold
                         }
@@ -1061,7 +1061,7 @@ Rectangle {
                                         width: 132; height: 198
                                         radius: 8
                                         color: "#141414"
-                                        border.color: recCard.activeFocus ? "#ffffff" : "#242424"
+                                        border.color: recCard.activeFocus ? Theme.textPrimary : "#242424"
                                         border.width: recCard.activeFocus ? 2 : 1
                                         clip: true
                                         scale: recMa.containsMouse ? 1.03 : 1.0
@@ -1089,7 +1089,7 @@ Rectangle {
                                                     var sc = m ? AniListApi.score(m) : ""
                                                     return sc ? "\u2605 " + sc : ""
                                                 }
-                                                color: "#ffffff"
+                                                color: Theme.textPrimary
                                                 font.family: detailPage.displayFont
                                                 font.pixelSize: 11; font.weight: Font.Bold
                                             }
@@ -1101,7 +1101,7 @@ Rectangle {
                                         width: 132
                                         text: recCard.modelData.mediaRecommendation
                                               ? AniListApi.title(recCard.modelData.mediaRecommendation) : ""
-                                        color: recMa.containsMouse ? "#ffffff" : "#b3b3b3"
+                                        color: recMa.containsMouse ? Theme.textPrimary : "#b3b3b3"
                                         font.family: detailPage.bodyFont
                                         font.pixelSize: 12
                                         elide: Text.ElideRight
@@ -1204,7 +1204,7 @@ Rectangle {
                 id: retryTxt
                 anchors.centerIn: parent
                 text: "Try again"
-                color: "#ffffff"
+                color: Theme.textPrimary
                 font.family: detailPage.bodyFont
                 font.pixelSize: 13
             }
