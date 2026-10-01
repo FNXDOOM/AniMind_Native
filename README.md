@@ -1,6 +1,8 @@
 # Animind Desktop Player
 
-Native desktop anime player built with **Qt 6.5.3 / QML** and **libmpv** on Windows. Features a full player UI, AniList search, watch history, My List, and Clerk-based authentication.
+Native desktop anime player built with **Qt 6.5.3 / QML** and **libmpv** on Windows: a full
+player UI, AniList-backed catalog, My List and history, sign-in through the AniMind backend, and
+synchronised watch parties.
 
 ---
 
@@ -80,59 +82,59 @@ Copy `.env.example` to `.env` and fill in your values:
 Copy-Item .env.example .env
 ```
 
-Open `.env` and set:
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANIMIND_BACKEND_URL` | `http://127.0.0.1:3001` | The Go backend: auth, catalog, `/api/me`, playback tickets, the watch-party socket. |
+| `ANIMIND_SITE_URL` | `http://localhost:3000` | The website that mints the desktop sign-in bridge token. |
+| `ANIMIND_MPV_PATH` | next to the exe | Where `libmpv-2.dll` lives. |
 
-```env
-ANIMIND_BACKEND_URL=https://your-backend-url.com
-ANIMIND_SUPABASE_URL=https://your-project.supabase.co
-ANIMIND_SUPABASE_ANON_KEY=your-supabase-anon-key
-```
+Sign-in opens that site's `/desktop-auth` page in the browser and listens on loopback for the
+hand-off, so the desktop client holds no password and no signing key. Supabase and Clerk are gone:
+history, My List and preferences are authenticated `/api/me/*` calls on the backend.
 
-- `ANIMIND_SUPABASE_URL` — your Supabase project URL (used for watch history read/write)
-- `ANIMIND_SUPABASE_ANON_KEY` — your Supabase `anon` public key
-- `ANIMIND_BACKEND_URL` — your Animind API backend URL
-
-> The app reads these at startup via `qgetenv` and exposes them to QML. Without them, watch history features will silently do nothing.
+`.env.example` lists the diagnostic and headless-harness variables.
 
 ---
 
 ## 5. Build & Run
 
 ```powershell
-# Install Node dependencies (Jest + fast-check for tests)
-npm install
-
-# Configure CMake (one time, or after CMakeLists.txt changes)
-npm run configure
-
-# Build the C++ host
-npm run build
-
-# Launch the app
-npm run start
+npm install                                   # Jest + fast-check
+cmake -S qt_host -B qt_host/build             # configure (no -A: see the note below)
+cmake --build qt_host/build --config Release  # build
+qt_host\build\Release\AnimindQtHost.exe       # run
 ```
 
-Or do configure + build + launch in one step:
+> `npm run configure` passes `-A x64`, which conflicts with the platform recorded in an existing
+> `qt_host/build` cache and fails. Configure without `-A`. Deleting the cache would also delete
+> the installer `.exe` that lives in `build/`, so it is not the fix.
 
-```powershell
-npm run dev
-```
-
-After the first build, editing QML files **does not require a rebuild** — just restart:
-
-```powershell
-npm run start
-```
+After the first build, editing QML **does not require a rebuild** — the deploy step copies
+`qt_host/qml/` next to the exe, so `cmake --build` (or just re-copying the folder) is enough to
+pick up a QML change. A C++ change needs the build.
 
 ---
 
 ## 6. Run Tests
 
 ```powershell
-npm test
+npm test        # Jest: 6 suites, 79 tests over the pure QML helpers
+cmake --build qt_host/build --config Release --target syncCoreTests
+qt_host\build\Release\syncCoreTests.exe -o results.txt,txt
+ctest --test-dir qt_host/build -C Release
 ```
 
-Runs 5 test suites (60 tests) covering property-based and unit tests for `computeDisplayName`, TopBar avatar initial, AniList API, SideNav display name, and TopBar avatar states.
+`syncCoreTests` covers the three pure sync layers — `clock_estimator`, `sync_decision`,
+`sync_telemetry` — 40 cases with no socket, no player and no real clock: every instant is passed
+in, which is the only way packet ordering, hysteresis and scheduled starts can be shown to hold
+rather than assumed.
+
+> Its PASS/FAIL lines appear **only** when redirected to a file (`-o results.txt,txt`); writing to
+> stdout or `>` produces nothing and the exit code is the only signal. Read the file too — the
+> exit code is a failure *count*.
+
+Jest covers QML-side helpers by inlining them, so it cannot see a change to the `.qml` file it
+claims to test. Anything that must not drift lives behind a C++ test instead.
 
 ---
 
@@ -142,29 +144,27 @@ Runs 5 test suites (60 tests) covering property-based and unit tests for `comput
 animind-desktop-player/
 ├── qt_host/
 │   ├── src/
-│   │   ├── main.cpp              ← Qt app entry point
-│   │   ├── auth_manager.h/.cpp   ← Clerk auth C++ singleton (authManager in QML)
+│   │   ├── main.cpp              ← entry point, player shell, headless harnesses
+│   │   ├── auth_manager.h/.cpp   ← backend sign-in + bridge listener (authManager in QML)
+│   │   ├── backend_api.h/.cpp    ← REST client: catalog, /api/me, tickets (api in QML)
+│   │   ├── syncplay_client.h/.cpp← Engine.IO/Socket.IO client + room view (syncplay in QML)
+│   │   ├── clock_estimator.h/.cpp← four-timestamp clock estimate, monotonic projection
+│   │   ├── sync_decision.h/.cpp  ← the sync policy: one pure decide() returning named outcomes
+│   │   ├── sync_telemetry.h/.cpp ← drift percentiles, correction counts, start skew
 │   │   ├── mpv_item.h/.cpp       ← MpvVideo QML type (libmpv OpenGL renderer)
+│   │   └── backend_config.h      ← the two backend origins, environment-driven
 │   ├── qml/
-│   │   ├── main.qml              ← Root window, navigation, overlays
-│   │   ├── SideNav.qml           ← 256px sidebar
-│   │   ├── TopBar.qml            ← 64px top bar with search, bell, avatar
-│   │   ├── SearchOverlay.qml     ← Full-screen search overlay
-│   │   ├── NotificationPanel.qml ← Notification dropdown
-│   │   ├── AnimePosterCard.qml   ← Reusable poster card
-│   │   ├── AniListApi.qml        ← AniList GraphQL client singleton
-│   │   └── pages/
-│   │       ├── HomePage.qml
-│   │       ├── BrowsePage.qml
-│   │       ├── DetailPage.qml
-│   │       ├── HistoryPage.qml   ← Watch history (Supabase)
-│   │       ├── MyListPage.qml    ← Saved anime list
-│   │       └── SimulcastPage.qml
+│   │   ├── main.qml              ← root window, navigation, player chrome, overlays
+│   │   ├── Theme.qml             ← every colour, size, font and duration
+│   │   ├── SideNav.qml / TopBar.qml / AnimePosterCard.qml / AniListApi.qml
+│   │   ├── components/           ← WatchParty (policy), PartyPanel, HeroBanner, EpisodeSidebar,
+│   │   │                            AuthSheet, ShortcutOverlay, buttons, empty states
+│   │   └── pages/                ← Home, Browse, Detail, History, MyList, Search, Settings
 │   ├── include/mpv/              ← libmpv headers
 │   ├── tests/
-│   │   ├── property/             ← fast-check property tests
-│   │   └── unit/                 ← Jest unit tests
-│   └── CMakeLists.txt
+│   │   ├── property/ unit/       ← fast-check and Jest tests of the pure QML helpers
+│   │   └── cpp/                  ← Qt Test for the sync layers (target syncCoreTests)
+│   └── CMakeLists.txt            ← AnimindQtHost + syncCoreTests
 ├── vendor/mpv/win-x64/           ← libmpv DLLs (not in repo, add manually)
 ├── .env.example                  ← Environment variable template
 ├── .env                          ← Your local secrets (gitignored)
@@ -178,12 +178,12 @@ animind-desktop-player/
 | Script | What it does |
 |--------|-------------|
 | `npm run install:qt` | Install Qt 6.5.3 via aqt |
-| `npm run configure` | Run CMake configure |
+| `npm run configure` | CMake configure — **fails against an existing build cache**, see §5 |
 | `npm run build` | Build the C++ host (Release) |
 | `npm run dev` | Build + launch |
 | `npm run start` | Launch the built exe |
-| `npm run clean:build` | Delete `qt_host/build/` |
-| `npm test` | Run all Jest tests |
+| `npm run clean:build` | Delete `qt_host/build/` (also deletes the installer exe — avoid) |
+| `npm test` | Jest only; the C++ sync tests are a separate target (§6) |
 
 ---
 
@@ -196,7 +196,34 @@ animind-desktop-player/
 | `→` / `←` | Seek ±5 seconds |
 | `↑` / `↓` | Volume ±5% |
 | `M` | Toggle mute |
+| `[` / `]` | Previous / next chapter |
+| `S` | Toggle subtitles |
+| `W` | Open the watch-party panel |
+| `?` | Full shortcut map |
 | `Escape` | Exit player / close overlays |
+
+---
+
+## Watch parties
+
+A room is code-shared and server-authoritative: the hub owns the clock, and every member is told
+the *instant* to act at rather than acting when a packet lands.
+
+| Layer | File | Owns |
+|---|---|---|
+| Transport | `syncplay_client.cpp` | Socket framing, roster, gate state, packet ordering by `seq` |
+| Time | `clock_estimator.cpp` | Server-vs-client offset from four timestamps, monotonic projection of the group position |
+| Decision | `sync_decision.cpp` | `decide(room, local) → outcome`: `await-schedule`, `nudge-slow`, `correct-to-group`, `reject-stale`, … |
+| Actuation | `WatchParty.qml` | Carries the outcome out on mpv, and never corrects the viewer while they are driving |
+
+The policy is one function with named answers, which is what makes it testable: the rules that
+used to hide in event handlers (stale broadcasts, self-echo, one's own action arriving back as a
+command, a pause flickering across the room) are each a case in `syncCoreTests`.
+
+Protocol details, the tuning block the hub publishes (`syncConfig`) and the measured
+0 ms-across-400 ms-of-delay start skew are in
+`docs/syncplay-improvement-plan.md` §13. The wire contract lives beside the server, in
+`Animind_Backend_Go/docs/06-watch-parties.md` and `internal/syncplay/room.go`.
 
 ---
 
