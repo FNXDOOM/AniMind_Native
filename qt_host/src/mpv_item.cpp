@@ -143,6 +143,9 @@ MpvItem::MpvItem(QQuickItem* parent)
 }
 
 MpvItem::~MpvItem() {
+    // The pump thread calls mpv_wait_event on the handle, so it has to be joined before
+    // the handle is destroyed or termination races with a blocking read.
+    stopEventPump();
     std::lock_guard<std::mutex> lock(m_mpvMutex);
     if (m_mpv) {
         mpv_terminate_destroy(m_mpv);
@@ -208,6 +211,7 @@ bool MpvItem::initializeMpv() {
     qInfo() << "libmpv initialized successfully";
     m_ready.store(true);
     emit rendererReadyChanged();
+    startEventPump();
     return true;
 }
 
@@ -242,6 +246,51 @@ void MpvItem::command(const QVariantList& params) {
     if (err < 0) {
         qWarning() << "mpv_command failed:" << mpv_error_string(err);
     }
+}
+
+namespace {
+QVariant mpvNodeToVariant(mpv_node* node)
+{
+    switch (node->format) {
+    case MPV_FORMAT_STRING: return QString::fromUtf8(node->u.string);
+    case MPV_FORMAT_FLAG:   return node->u.flag != 0;
+    case MPV_FORMAT_INT64:  return static_cast<double>(node->u.int64);
+    case MPV_FORMAT_DOUBLE: return node->u.double_;
+    case MPV_FORMAT_NODE_ARRAY: {
+        QVariantList list;
+        for (int i = 0; i < node->u.list->num; ++i)
+            list.append(mpvNodeToVariant(&node->u.list->values[i]));
+        return list;
+    }
+    case MPV_FORMAT_NODE_MAP: {
+        QVariantMap map;
+        for (int i = 0; i < node->u.list->num; ++i)
+            map.insert(QString::fromUtf8(node->u.list->keys[i]),
+                       mpvNodeToVariant(&node->u.list->values[i]));
+        return map;
+    }
+    default: return QVariant();
+    }
+}
+}
+
+QVariantList MpvItem::getPropertyList(const QString& name)
+{
+    QVariantList empty;
+    if (!m_ready.load()) return empty;
+
+    std::lock_guard<std::mutex> lock(m_mpvMutex);
+    if (!m_mpv) return empty;
+
+    mpv_node node;
+    if (mpv_get_property(m_mpv, name.toUtf8().constData(), MPV_FORMAT_NODE, &node) < 0)
+        return empty;
+
+    const QVariant value = mpvNodeToVariant(&node);
+    mpv_free_node_contents(&node);
+    if (value.typeId() == QMetaType::QVariantList)
+        return value.toList();
+    return empty;
 }
 
 void MpvItem::setProperty(const QString& name, const QVariant& value) {
@@ -295,4 +344,145 @@ double MpvItem::getPropertyDouble(const QString& name) {
         return static_cast<double>(ivalue);
     }
     return value;
+}
+
+// ── Event pump ──────────────────────────────────────────────────────────────
+// mpv only delivers property notifications while someone drains its queue, so a worker
+// thread waits on events and republishes them on the GUI thread. QML never touches mpv
+// state from this thread directly.
+
+void MpvItem::observeProperties() {
+    if (!m_mpv) return;
+    mpv_observe_property(m_mpv, 0, "time-pos", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, 0, "duration", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, 0, "demuxer-cache-duration", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, 0, "speed", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, 0, "pause", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, 0, "seeking", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, 0, "paused-for-cache", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, 0, "idle-active", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, 0, "eof-reason", MPV_FORMAT_STRING);
+}
+
+void MpvItem::startEventPump() {
+    if (m_eventThread.joinable()) return;
+    observeProperties();
+    m_stopPump.store(false);
+    m_eventThread = std::thread([this]() { pumpEvents(); });
+}
+
+void MpvItem::stopEventPump() {
+    m_stopPump.store(true);
+    if (m_eventThread.joinable())
+        m_eventThread.join();
+}
+
+void MpvItem::pumpEvents() {
+    while (!m_stopPump.load()) {
+        mpv_event* event = mpv_wait_event(m_mpv, 0.05);
+        if (!event || event->event_id == MPV_EVENT_NONE)
+            continue;
+        switch (event->event_id) {
+        case MPV_EVENT_PROPERTY_CHANGE:
+            handlePropertyChange(event->data);
+            break;
+        case MPV_EVENT_FILE_LOADED: {
+            QPointer<MpvItem> guard(this);
+            QMetaObject::invokeMethod(this, [guard]() {
+                if (guard) emit guard->fileOpened();
+            }, Qt::QueuedConnection);
+            break;
+        }
+        case MPV_EVENT_END_FILE:
+            handleEndFile(event->data);
+            break;
+        case MPV_EVENT_SHUTDOWN:
+            m_stopPump.store(true);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+void MpvItem::publishDouble(std::atomic<double>& slot, double value, void (MpvItem::*notify)()) {
+    if (qAbs(slot.load() - value) < 0.0005)
+        return;
+    slot.store(value);
+    QPointer<MpvItem> guard(this);
+    QMetaObject::invokeMethod(this, [guard, notify]() {
+        if (guard) (guard->*notify)();
+    }, Qt::QueuedConnection);
+}
+
+void MpvItem::publishFlag(std::atomic<bool>& slot, bool value, void (MpvItem::*notify)()) {
+    if (slot.load() == value)
+        return;
+    slot.store(value);
+    QPointer<MpvItem> guard(this);
+    QMetaObject::invokeMethod(this, [guard, notify]() {
+        if (guard) (guard->*notify)();
+    }, Qt::QueuedConnection);
+}
+
+void MpvItem::handlePropertyChange(void* raw) {
+    auto* prop = static_cast<mpv_event_property*>(raw);
+    if (!prop || prop->format == MPV_FORMAT_NONE || !prop->data)
+        return;
+
+    const QByteArray name(prop->name);
+    if (prop->format == MPV_FORMAT_DOUBLE) {
+        const double value = *static_cast<double*>(prop->data);
+        if (name == "time-pos")
+            publishDouble(m_position, value, &MpvItem::positionChanged);
+        else if (name == "duration")
+            publishDouble(m_duration, value, &MpvItem::durationChanged);
+        else if (name == "demuxer-cache-duration")
+            publishDouble(m_bufferedAhead, value, &MpvItem::bufferedAheadChanged);
+        else if (name == "speed")
+            publishDouble(m_speed, value, &MpvItem::playbackRateChanged);
+    } else if (prop->format == MPV_FORMAT_STRING) {
+        // keep-open leaves the file loaded at the end, so END_FILE never arrives during
+        // playback; eof-reason is the only signal that a file actually finished.
+        // For MPV_FORMAT_STRING the event carries a char**, not a char*.
+        const QString value = prop->data ? QString::fromUtf8(*static_cast<char**>(prop->data)) : QString();
+        if (name == "eof-reason") {
+            if (value.isEmpty())
+                m_endReported = false;
+            else if (!m_endReported) {
+                m_endReported = true;
+                reportEnd(value);
+            }
+        }
+    } else if (prop->format == MPV_FORMAT_FLAG) {
+        const bool value = *static_cast<int*>(prop->data) != 0;
+        if (name == "pause")
+            publishFlag(m_paused, value, &MpvItem::pausedChanged);
+        else if (name == "seeking")
+            publishFlag(m_seeking, value, &MpvItem::seekingChanged);
+        else if (name == "paused-for-cache")
+            publishFlag(m_buffering, value, &MpvItem::bufferingChanged);
+        else if (name == "idle-active")
+            publishFlag(m_idle, value, &MpvItem::idleChanged);
+    }
+}
+
+void MpvItem::handleEndFile(void* raw) {
+    auto* end = static_cast<mpv_event_end_file*>(raw);
+    if (!end)
+        return;
+    // A clean END_FILE is a load or a stop, not an ending: reporting it as eof made the
+    // player advance on teardown. Only a real failure belongs here.
+    if (end->error != 0) {
+        m_endReported = true;
+        reportEnd(QString::fromUtf8(mpv_error_string(end->error)));
+    }
+}
+
+void MpvItem::reportEnd(const QString& reason)
+{
+    QPointer<MpvItem> guard(this);
+    QMetaObject::invokeMethod(this, [guard, reason]() {
+        if (guard) emit guard->fileFinished(reason);
+    }, Qt::QueuedConnection);
 }
